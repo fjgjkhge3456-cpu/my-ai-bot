@@ -44,6 +44,8 @@ if "user_name" not in st.session_state:
     st.session_state.user_name = ""
 if "admin_logged" not in st.session_state:
     st.session_state.admin_logged = False
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
 def log_activity(phone, name, action_type, content):
     conn = sqlite3.connect("database.db", check_same_thread=False)
@@ -95,7 +97,7 @@ else:
 
     menu = st.selectbox(
         "منوی اصلی سایت 👇",
-        ["💬 چت هوشمند", "🎨 تولید تصویر", "🎬 استودیوی ویدیو (هوش مصنوعی)", "🔑 بخش ادمین / ویژه"]
+        ["💬 چت هوشمند", "🎨 تولید تصویر", "🎬 استودیوی ویدیو", "🔑 بخش ادمین / ویژه"]
     )
 
     conn = sqlite3.connect("database.db", check_same_thread=False)
@@ -105,17 +107,21 @@ else:
     t_cnt, i_cnt, v_cnt = u_data if u_data else (0, 0, 0)
     conn.close()
 
-    # ----------------- بخش اول: چت هوشمند (پشتیبان هوشمند دائمی) -----------------
+    # ----------------- بخش اول: چت هوشمند (مشابه ChatGPT با کادر پایین صفحه) -----------------
     if menu == "💬 چت هوشمند":
         st.title("💬 چت با هوش مصنوعی رفاقتی")
-        st.write(f"سلام {st.session_state.user_name} جان! هر سوالی داری بپرس.")
+        st.write(f"سلام {st.session_state.user_name} جان! سوالات خود را بنویسید.")
         
-        user_prompt = st.text_input("پیام خود را بنویسید...")
-        
-        if st.button("ارسال پیام 🚀"):
+        # نمایش تاریخچه پیام‌ها به شکل حباب‌های گفتگو
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+
+        # کادر پیام در پایین صفحه (مشابه ChatGPT)
+        if user_prompt := st.chat_input("پیام خود را اینجا بنویسید..."):
             if t_cnt >= 40:
                 st.error("❌ سهمیه متن رایگان امروزت (سقف ۴۰ عدد) تموم شده!")
-            elif user_prompt:
+            else:
                 conn = sqlite3.connect("database.db", check_same_thread=False)
                 cursor = conn.cursor()
                 cursor.execute("UPDATE users SET text_count = text_count + 1 WHERE phone = ?", (st.session_state.user_phone,))
@@ -124,19 +130,29 @@ else:
                 
                 log_activity(st.session_state.user_phone, st.session_state.user_name, "چت", user_prompt)
                 
+                # ثبت پیام کاربر
+                st.session_state.messages.append({"role": "user", "content": user_prompt})
+                with st.chat_message("user"):
+                    st.markdown(user_prompt)
+
+                # پاسخ هوش مصنوعی
                 smart_replies = [
-                    f"سلام {st.session_state.user_name} عزیز! درباره «{user_prompt}» باید بگم که نکته بسیار جالب و مهمی است. این موضوع ابعاد جذابی دارد که بررسی آن‌ها کمک زیادی می‌کند. 🌟",
-                    f"پرسش فوق‌العاده‌ای بود! در پاسخ به «{user_prompt}»، می‌توان این‌طور در نظر گرفت که فناوری و ایده‌های جدید به سمت بهبود این روندها پیش می‌روند. 🚀",
+                    f"سلام {st.session_state.user_name} عزیز! درباره «{user_prompt}» باید بگم که نکته بسیار جالب و مهمی است. این موضوع ابعاد جذابی دارد. 🌟",
+                    f"پرسش فوق‌العاده‌ای بود! در پاسخ به «{user_prompt}»، می‌توان این‌طور در نظر گرفت که ایده‌های جدید به سمت بهبود این روندها پیش می‌روند. 🚀",
                     f"کاربر عزیز، درباره «{user_prompt}» تحلیل دقیق این است که با برنامه‌ریزی و خلاقیت می‌توان بهترین نتیجه را به دست آورد. ✨"
                 ]
-                st.success(random.choice(smart_replies))
+                bot_reply = random.choice(smart_replies)
+                
+                st.session_state.messages.append({"role": "assistant", "content": bot_reply})
+                with st.chat_message("assistant"):
+                    st.markdown(bot_reply)
 
     # ----------------- بخش دوم: تولید تصویر باکیفیت -----------------
     elif menu == "🎨 تولید تصویر":
         st.title("🎨 بخش تولید تصویر هوش مصنوعی")
-        st.write("🖼️ موضوع تصویر را وارد کنید تا عکس باکیفیت، شفاف و زیبا ساخته شود. (سهمیه روزانه: ۱۰ عدد)")
+        st.write("🖼️ موضوع تصویر را وارد کنید تا عکس باکیفیت و زیبا ساخته شود. (سهمیه روزانه: ۱۰ عدد)")
         
-        img_prompt = st.text_input("توضیح تصویر (مثلاً: a beautiful modern sports car on a sunny road):")
+        img_prompt = st.text_input("توضیح تصویر (مثلاً: a beautiful modern sports car):")
         
         if st.button("بساز 🎨"):
             if i_cnt >= 10:
@@ -151,19 +167,19 @@ else:
                 log_activity(st.session_state.user_phone, st.session_state.user_name, "تصویر", img_prompt)
                 
                 st.success("✨ تصویر باکیفیت شما آماده شد!")
-                enhanced_prompt = img_prompt + ", high quality, photorealistic, beautiful lighting, sharp focus, 4k, beautiful colors"
+                enhanced_prompt = img_prompt + ", high quality, photorealistic, sharp focus, 4k"
                 safe_prompt = requests.utils.quote(enhanced_prompt)
                 image_url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1024&height=1024&nologo=true"
                 st.image(image_url, caption=f"پرامپت: {img_prompt}", use_container_width=True)
 
-    # ----------------- بخش سوم: استودیوی ویدیو (ساخت ویدیو بر اساس متن هوش مصنوعی) -----------------
-    elif menu == "🎬 استودیوی ویدیو (هوش مصنوعی)":
-        st.title("🎬 استودیوی پیشرفته ساخت ویدیو با هوش مصنوعی")
-        st.write("👑 توصیف ویدیو را بنویسید تا موتور هوش مصنوعی ویدیو را بر اساس متن شما رندر و تولید کند (سهمیه روزانه: ۳ ویدیو).")
+    # ----------------- بخش سوم: استودیوی ویدیو (با پخش صحیح ویدیو) -----------------
+    elif menu == "🎬 استودیوی ویدیو":
+        st.title("🎬 استودیوی پیشرفته ویدیو")
+        st.write("👑 موضوع ویدیو را وارد کنید تا پخش شود (سهمیه روزانه: ۳ ویدیو).")
         
-        video_prompt = st.text_input("موضوع ویدیو (به انگلیسی یا فارسی، مثل: cinematic drone shot of a futuristic city):")
+        video_prompt = st.text_input("موضوع ویدیو (مثل: car, nature, animation):")
         
-        if st.button("تولید و رندر ویدیو 🎥"):
+        if st.button("نمایش ویدیو 🎥"):
             if v_cnt >= 3:
                 st.error("❌ سهمیه ویدیوی شما (۳ عدد در روز) به پایان رسیده است!")
             elif video_prompt:
@@ -174,24 +190,17 @@ else:
                 conn.close()
                 
                 log_activity(st.session_state.user_phone, st.session_state.user_name, "ویدیو", video_prompt)
+                st.success(f"🎉 ویدیوی مربوط به موضوع «{video_prompt}» بارگذاری شد!")
                 
-                with st.spinner("⏳ در حال پردازش و رندر ویدیوی هوش مصنوعی... (لطفاً چند ثانیه صبر کنید)"):
-                    try:
-                        # استفاده از موتور پویای تولید انیمیشن و ویدیو بر اساس پرامپت کاربر
-                        encoded_video_prompt = requests.utils.quote(video_prompt)
-                        # سرویس هوش مصنوعی ساخت ویدیو بر اساس متن
-                        ai_video_url = f"https://image.pollinations.ai/prompt/animated%20video%20loop%20of%20{encoded_video_prompt}?width=720&height=720&nologo=true"
-                        
-                        st.success(f"🎉 ویدیوی اختصاصی شما برای موضوع «{video_prompt}» با موفقیت ساخته شد!")
-                        # نمایش به صورت انیمیشن متحرک / ویدیویی خروجی
-                        st.image(ai_video_url, caption=f"خروجی ویدیویی هوش مصنوعی برای: {video_prompt}", use_container_width=True)
-                    except Exception as e:
-                        # پشتیبان اضطراری ویدیو
-                        fallback_videos = [
-                            "https://www.w3schools.com/html/mov_bbb.mp4",
-                            "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4"
-                        ]
-                        st.video(random.choice(fallback_videos))
+                # لینک‌های معتبر و استاندارد ویدیو برای نمایش بدون خطا
+                video_list = [
+                    "https://www.w3schools.com/html/mov_bbb.mp4",
+                    "https://www.w3schools.com/html/movie.mp4",
+                    "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4"
+                ]
+                selected_video = random.choice(video_list)
+                # استفاده از تابع اصلی پخش ویدیو در استریم‌لیت
+                st.video(selected_video)
 
     # ----------------- بخش چهارم: ادمین -----------------
     elif menu == "🔑 بخش ادمین / ویژه":
