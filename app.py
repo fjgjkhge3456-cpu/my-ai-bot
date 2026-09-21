@@ -1,6 +1,5 @@
 import streamlit as st
 import requests
-import random
 import sqlite3
 import datetime
 
@@ -11,7 +10,6 @@ st.set_page_config(page_title="ربات هوش مصنوعی من", page_icon="�
 def init_db():
     conn = sqlite3.connect("database.db", check_same_thread=False)
     cursor = conn.cursor()
-    # جدول کاربران
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             phone TEXT PRIMARY KEY,
@@ -22,7 +20,6 @@ def init_db():
             last_login TEXT
         )
     """)
-    # جدول تاریخچه فعالیت‌ها و چت‌ها
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS activity_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,14 +42,9 @@ if "user_phone" not in st.session_state:
     st.session_state.user_phone = ""
 if "user_name" not in st.session_state:
     st.session_state.user_name = ""
-if "verification_code" not in st.session_state:
-    st.session_state.verification_code = ""
-if "code_sent" not in st.session_state:
-    st.session_state.code_sent = False
 if "admin_logged" not in st.session_state:
     st.session_state.admin_logged = False
 
-# تابع کمکی برای ثبت لاگ در دیتابیس
 def log_activity(phone, name, action_type, content):
     conn = sqlite3.connect("database.db", check_same_thread=False)
     cursor = conn.cursor()
@@ -63,7 +55,6 @@ def log_activity(phone, name, action_type, content):
     conn.commit()
     conn.close()
 
-# تابع کمکی برای بررسی و بروزرسانی سهمیه کاربر
 def get_or_create_user(phone, name):
     conn = sqlite3.connect("database.db", check_same_thread=False)
     cursor = conn.cursor()
@@ -75,50 +66,32 @@ def get_or_create_user(phone, name):
             (phone, name, str(datetime.datetime.now()))
         )
         conn.commit()
-        user = (phone, name, 0, 0, 0, str(datetime.datetime.now()))
     conn.close()
-    return user
 
-# ----------------- سیستم ورود و ثبت‌نام اولیه -----------------
+# ----------------- سیستم ورود ساده و سریع -----------------
 if not st.session_state.authenticated:
     st.title("🔐 ورود به ربات هوش مصنوعی")
-    st.write("لطفاً نام و شماره تلفن خود را وارد کنید تا کد تأیید برای شما ارسال شود.")
+    st.write("لطفاً نام و شماره تلفن خود را وارد کنید تا وارد سامانه شوید.")
     
     name_input = st.text_input("نام و نام خانوادگی:")
     phone_input = st.text_input("شماره تلفن همراه (مثلا 09123456789):")
     
-    if not st.session_state.code_sent:
-        if st.button("ارسال کد تأیید 📩"):
-            if name_input and phone_input:
-                generated_code = str(random.randint(1000, 9999))
-                st.session_state.verification_code = generated_code
-                st.session_state.user_name = name_input
-                st.session_state.user_phone = phone_input
-                st.session_state.code_sent = True
-                st.success(f"✅ کد تأیید خودکار ارسال شد! (کد تست شما: {generated_code})")
-                st.rerun()
-            else:
-                st.error("❌ لطفاً هم نام و هم شماره تلفن را وارد کنید.")
-    else:
-        st.info(f"کد تأیید به شماره {st.session_state.user_phone} ارسال شد.")
-        entered_code = st.text_input("کد تأیید ۴ رقمی را وارد کنید:")
-        
-        if st.button("تایید و ورود 🚀"):
-            if entered_code == st.session_state.verification_code:
-                st.session_state.authenticated = True
-                get_or_create_user(st.session_state.user_phone, st.session_state.user_name)
-                log_activity(st.session_state.user_phone, st.session_state.user_name, "ورود", "کاربر وارد سامانه شد")
-                st.success(f"🎉 خوش آمدی {st.session_state.user_name} عزیز!")
-                st.rerun()
-            else:
-                st.error("❌ کد وارد شده اشتباه است.")
+    if st.button("ورود به سایت 🚀"):
+        if name_input and phone_input:
+            st.session_state.user_name = name_input
+            st.session_state.user_phone = phone_input
+            st.session_state.authenticated = True
+            get_or_create_user(phone_input, name_input)
+            log_activity(phone_input, name_input, "ورود", "کاربر وارد سامانه شد")
+            st.rerun()
+        else:
+            st.error("❌ لطفاً هم نام و هم شماره تلفن را وارد کنید.")
 
 else:
     # ----------------- محیط اصلی سایت بعد از ورود -----------------
     st.sidebar.success(f"👤 کاربر: {st.session_state.user_name}")
     if st.sidebar.button("خروج از حساب 🚪"):
         st.session_state.authenticated = False
-        st.session_state.code_sent = False
         st.rerun()
 
     menu = st.selectbox(
@@ -145,7 +118,6 @@ else:
             if t_cnt >= 40:
                 st.error("❌ سهمیه متن رایگان امروزت (سقف ۴۰ عدد) تموم شده!")
             elif user_prompt:
-                # افزایش سهمیه در دیتابیس
                 conn = sqlite3.connect("database.db", check_same_thread=False)
                 cursor = conn.cursor()
                 cursor.execute("UPDATE users SET text_count = text_count + 1 WHERE phone = ?", (st.session_state.user_phone,))
@@ -176,9 +148,9 @@ else:
     # ----------------- بخش دوم: تولید تصویر -----------------
     elif menu == "🎨 تولید تصویر":
         st.title("🎨 بخش تولید تصویر هوش مصنوعی")
-        st.write("🖼️ متن خود را وارد کنید تا تصویر دلخواهتان ساخته شود. (سهمیه روزانه: ۱۰ عدد)")
+        st.write("🖼️ پرامپت خود را به انگلیسی بنویسید تا بهترین کیفیت تصویر خروجی داده شود. (سهمیه روزانه: ۱۰ عدد)")
         
-        img_prompt = st.text_input("توضیح تصویر به انگلیسی یا فارسی:")
+        img_prompt = st.text_input("توضیح تصویر (ترجیحاً انگلیسی برای کیفیت بهتر، مثلاً: futuristic car in cyberpunk city):")
         
         if st.button("بساز 🎨"):
             if i_cnt >= 10:
@@ -193,16 +165,17 @@ else:
                 log_activity(st.session_state.user_phone, st.session_state.user_name, "تصویر", img_prompt)
                 
                 st.success("✨ تصویر شما با موفقیت آماده شد!")
+                # موتور پیشرفته و استاندارد ساخت تصویر
                 safe_prompt = requests.utils.quote(img_prompt)
-                image_url = f"https://image.pollinations.ai/prompt/{safe_prompt}"
-                st.image(image_url, caption=f"پرامپت شما: {img_prompt}")
+                image_url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1024&height=1024&nologo=true"
+                st.image(image_url, caption=f"پرامپت شما: {img_prompt}", use_column_width=True)
 
     # ----------------- بخش سوم: استودیوی ویدیو -----------------
     elif menu == "🎬 استودیوی ویدیو (اشتراکی)":
         st.title("🎬 استودیوی پیشرفته تولید ویدیو")
         st.write("👑 این بخش مخصوص کاربران ویژه است (سهمیه روزانه: ۳ ویدیو).")
         
-        video_prompt = st.text_input("موضوع ویدیو را وارد کنید:")
+        video_prompt = st.text_input("موضوع و سناریوی ویدیو را وارد کنید:")
         
         if st.button("تولید ویدیو 🎥"):
             if v_cnt >= 3:
@@ -215,7 +188,8 @@ else:
                 conn.close()
                 
                 log_activity(st.session_state.user_phone, st.session_state.user_name, "ویدیو", video_prompt)
-                st.info("⏳ درخواست ویدیوی شما ثبت شد و در صف پردازش قرار گرفت!")
+                st.success("✅ درخواست ساخت ویدیوی شما با موفقیت ثبت شد و به صف رندرینگ هوش مصنوعی اضافه گردید!")
+                st.info("⏳ به دلیل حجم پردازش بالا، خروجی ویدیو پس از آماده‌سازی به پنل ادمین ارسال خواهد شد.")
 
     # ----------------- بخش چهارم: ادمین و مدیریت کامل -----------------
     elif menu == "🔑 بخش ادمین / ویژه":
@@ -232,7 +206,6 @@ else:
         if st.session_state.admin_logged:
             st.subheader("📊 پنل نظارت بر کاربران و فعالیت‌ها:")
             
-            # خواندن تمام کاربران از دیتابیس
             conn = sqlite3.connect("database.db", check_same_thread=False)
             cursor = conn.cursor()
             
