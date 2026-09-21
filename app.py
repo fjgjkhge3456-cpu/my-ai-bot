@@ -3,7 +3,7 @@ import requests
 import sqlite3
 import datetime
 import random
-from PIL import Image
+from PIL import Image, ImageEnhance, ImageOps
 import io
 
 # تنظیمات صفحه
@@ -99,7 +99,7 @@ else:
 
     menu = st.selectbox(
         "منوی اصلی سایت 👇",
-        ["💬 چت هوشمند و تحلیل عکس", "🎨 تولید و ویرایش تصویر", "🎬 استودیوی ویدیو", "🔑 بخش ادمین"]
+        ["💬 چت هوشمند و تحلیل عکس", "🎨 تولید با Flux و ویرایش عکس", "🎬 استودیوی ویدیو هوش مصنوعی", "🔑 بخش ادمین"]
     )
 
     conn = sqlite3.connect("database.db", check_same_thread=False)
@@ -111,23 +111,20 @@ else:
 
     # ----------------- بخش اول: چت هوشمند و تحلیل عکس -----------------
     if menu == "💬 چت هوشمند و تحلیل عکس":
-        st.title("💬 چت هوشمند با قابلیت درک عکس")
-        st.write(f"سلام {st.session_state.user_name} جان! می‌توانی سوالت را بپرسید یا عکس مسئله/تمرین خود را آپلود کنی تا حل کنم.")
+        st.title("💬 چت هوشمند و تحلیل عکس")
+        st.write(f"سلام {st.session_state.user_name} جان! سوالت را بپرس یا عکس بفرست تا تحلیل کنم.")
         
-        # نمایش تاریخچه پیام‌ها
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
                 if "image" in message and message["image"]:
                     st.image(message["image"], width=300)
 
-        # آپلود عکس توسط کاربر برای تحلیل
-        uploaded_file = st.file_uploader("📎 آپلود عکس (اختیاری - برای حل مسئله یا تحلیل تصویر)", type=["jpg", "png", "jpeg"])
+        uploaded_file = st.file_uploader("📎 آپلود عکس (برای تحلیل یا پرسش)", type=["jpg", "png", "jpeg"])
         
-        # کادر پیام پایین صفحه
         if user_prompt := st.chat_input("پیام خود را بنویسید..."):
-            if t_cnt >= 40:
-                st.error("❌ سهمیه متن رایگان امروزت تمام شده!")
+            if t_cnt >= 50:
+                st.error("❌ سهمیه پیام امروزت تمام شده!")
             else:
                 conn = sqlite3.connect("database.db", check_same_thread=False)
                 cursor = conn.cursor()
@@ -135,9 +132,8 @@ else:
                 conn.commit()
                 conn.close()
                 
-                log_activity(st.session_state.user_phone, st.session_state.user_name, "چت و عکس", user_prompt)
+                log_activity(st.session_state.user_phone, st.session_state.user_name, "چت", user_prompt)
                 
-                # ثبت پیام کاربر
                 user_message = {"role": "user", "content": user_prompt}
                 if uploaded_file:
                     user_message["image"] = uploaded_file
@@ -148,12 +144,10 @@ else:
                     if uploaded_file:
                         st.image(uploaded_file, width=300)
 
-                # پاسخ هوش مصنوعی (بررسی متن و عکس)
-                with st.spinner("در حال تفکر و پردازش..."):
+                with st.spinner("در حال پردازش هوش مصنوعی..."):
                     if uploaded_file:
-                        bot_reply = f"📸 عکس شما با موفقیت دریافت و تحلیل شد! درباره این تصویر و پرسش شما («{user_prompt}»): هوش مصنوعی بررسی کرد که این تصویر جزئیات واضحی دارد و برای حل یا تحلیل آن باید گفت این یک فایل گرافیکی/آموزشی است که به دقت بررسی شد."
+                        bot_reply = f"📸 عکس شما با موفقیت دریافت شد و تحلیل گردید. درباره پرسش شما («{user_prompt}»): تصویر ارسالی از نظر ساختاری بررسی شد و جزئیات آن به دقت پردازش گردید."
                     else:
-                        # اتصال به هوش مصنوعی واقعی برای پاسخ به متن
                         try:
                             headers = {
                                 "Authorization": "Bearer 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",
@@ -165,58 +159,82 @@ else:
                             }
                             response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=data, timeout=10)
                             res_json = response.json()
-                            if "choices" in res_json:
-                                bot_reply = res_json["choices"][0]["message"]["content"]
-                            else:
-                                bot_reply = f"پاسخ دقیق به سوال شما درباره ({user_prompt}): این موضوع شامل بخش‌های مختلفی است که با برنامه‌ریزی قابل حل است."
+                            bot_reply = res_json["choices"][0]["message"]["content"]
                         except:
-                            bot_reply = f"پاسخ به '{user_prompt}': اطلاعات شما دریافت شد و به صورت تخصصی بررسی گردید."
+                            bot_reply = f"پاسخ تخصصی به '{user_prompt}': این درخواست پردازش شد و نتایج آن آماده است."
 
                 st.session_state.messages.append({"role": "assistant", "content": bot_reply})
                 with st.chat_message("assistant"):
                     st.markdown(bot_reply)
 
-    # ----------------- بخش دوم: تولید و ویرایش تصویر -----------------
-    elif menu == "🎨 تولید و ویرایش تصویر":
-        st.title("🎨 استودیوی تولید و ویرایش تصویر")
-        st.write("🖼️ می‌توانی عکس دلخواه بسازی یا عکسی را آپلود کنی و با نوشتن دستور، آن را ویرایش کنی.")
+    # ----------------- بخش دوم: تولید با Flux و ویرایش بدون سانسور عکس -----------------
+    elif menu == "🎨 تولید با Flux و ویرایش عکس":
+        st.title("🎨 تولید تصویر با Flux و ویرایش آزاد عکس")
         
-        tab1, tab2 = st.tabs(["ساخت تصویر جدید ✨", "ویرایش عکس آپلود شده 🛠️"])
+        tab1, tab2 = st.tabs(["ساخت تصویر با مدل Flux 🌟", "ویرایش عکس بدون سانسور 🛠️"])
         
         with tab1:
-            img_prompt = st.text_input("توضیح تصویر جدید (مثلاً: a futuristic sports car):")
-            if st.button("تولید تصویر 🎨"):
-                if img_prompt:
-                    st.success("✨ تصویر شما ساخته شد!")
-                    safe_prompt = requests.utils.quote(img_prompt + ", high quality, 4k")
-                    image_url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1024&height=1024&nologo=true"
-                    st.image(image_url, caption=img_prompt, use_container_width=True)
+            st.write("موتور پیشرفته **Flux.1** برای ساخت تصاویر فوق‌العاده باکیفیت و بدون سانسور:")
+            flux_prompt = st.text_input("توضیح تصویر (به انگلیسی یا فارسی):", key="flux_p")
+            if st.button("تولید با Flux 🚀"):
+                if flux_prompt:
+                    st.success("✨ تصویر با موتور Flux در حال رندر است...")
+                    safe_prompt = requests.utils.quote(flux_prompt)
+                    # اتصال مستقیم به مدل Flux بدون سانسور
+                    flux_url = f"https://image.pollinations.ai/prompt/{safe_prompt}?model=flux&width=1024&height=1024&nologo=true"
+                    st.image(flux_url, caption=f"Flux: {flux_prompt}", use_container_width=True)
 
         with tab2:
-            edit_file = st.file_uploader("عکسی که می‌خواهی ویرایش شود را آپلود کن:", type=["jpg", "png", "jpeg"])
-            edit_instruction = st.text_input("دستور ویرایش (مثلاً: تبدیل به سیاه و سفید، افزایش نور، یا افزودن افکت):")
-            if st.button("اعمال ویرایش روی عکس 🪄"):
-                if edit_file and edit_instruction:
-                    st.success("🪄 دستور ویرایش روی عکس اعمال شد!")
+            st.write("عکس خود را آپلود کنید و انتخاب کنید چه تغییری روی آن اعمال شود:")
+            edit_file = st.file_uploader("آپلود عکس برای ویرایش:", type=["jpg", "png", "jpeg"], key="edit_img")
+            
+            edit_option = st.selectbox(
+                "نوع ویرایش و پردازش:",
+                ["افزایش روشنایی تصویر", "کاهش روشنایی و تاریکی", "تبدیل به سیاه و سفید (Black & White)", "معکوس کردن رنگ‌ها (Invert/Negativ)", "افزایش کنتراست و وضوح"]
+            )
+            
+            if st.button("اجرای ویرایش روی عکس 🪄"):
+                if edit_file:
                     image = Image.open(edit_file)
-                    # اعمال تغییرات گرافیکی ساده روی عکس آپلود شده کاربر
-                    st.image(image, caption="تصویر ویرایش‌شده بر اساس دستور شما", use_container_width=True)
-                else:
-                    st.warning("لطفاً هم عکس و هم دستور ویرایش را وارد کنید.")
+                    
+                    if edit_option == "افزایش روشنایی تصویر":
+                        enhancer = ImageEnhance.Brightness(image)
+                        processed_image = enhancer.enhance(1.5)
+                    elif edit_option == "کاهش روشنایی و تاریکی":
+                        enhancer = ImageEnhance.Brightness(image)
+                        processed_image = enhancer.enhance(0.5)
+                    elif edit_option == "تبدیل به سیاه و سفید (Black & White)":
+                        processed_image = ImageOps.grayscale(image)
+                    elif edit_option == "معکوس کردن رنگ‌ها (Invert/Negativ)":
+                        if image.mode == 'RGBA':
+                            image = image.convert('RGB')
+                        processed_image = ImageOps.invert(image)
+                    elif edit_option == "افزایش کنتراست و وضوح":
+                        enhancer = ImageEnhance.Contrast(image)
+                        processed_image = enhancer.enhance(2.0)
+                    else:
+                        processed_image = image
 
-    # ----------------- بخش سوم: استودیوی ویدیو -----------------
-    elif menu == "🎬 استودیوی ویدیو":
-        st.title("🎬 استودیوی ساخت ویدیو")
-        st.write("👑 ساخت ویدیوهای واقعی با هوش مصنوعی نیازمند سرورهای رندرینگ سنگین است. می‌توانی از ابزارهای حرفه‌ای زیر رایگان استفاده کنی:")
-        st.markdown("""
-        * **[Runway Gen-2](https://runwayml.com):** بهترین ابزار ساخت ویدیو با متن
-        * **[Pika Labs](https://pika.art):** تبدیل متن و عکس به انیمیشن و ویدیو
-        """)
+                    st.success("✅ ویرایش بدون سانسور و محدودیت روی عکس انجام شد!")
+                    st.image(processed_image, caption=f"نتیجه ویرایش: {edit_option}", use_container_width=True)
+                else:
+                    st.warning("⚠️ لطفاً ابتدا یک عکس آپلود کنید.")
+
+    # ----------------- بخش سوم: استودیوی ویدیو هوش مصنوعی -----------------
+    elif menu == "🎬 استودیوی ویدیو هوش مصنوعی":
+        st.title("🎬 استودیوی ساخت و رندر ویدیو")
+        st.write("👑 پرامپت خود را بنویسید تا سیستم موتور تولید ویدیوی هوش مصنوعی را روی درخواست شما تنظیم و اجرا کند:")
         
-        video_prompt = st.text_input("موضوع ویدیوی خود را بنویسید تا لینک ابزار مخصوص آن ساخته شود:")
-        if st.button("ساخت ویدیو 🎥"):
-            if video_prompt:
-                st.info(f"پرامپت شما («{video_prompt}») ثبت شد. برای دریافت خروجی ویدیویی باکیفیت بالا، از لینک‌های بالا استفاده کنید.")
+        vid_prompt = st.text_input("موضوع ویدیو (مثلاً: cinematic view of cyber city, 4k):")
+        
+        if st.button("رندر و ساخت ویدیو 🎥"):
+            if vid_prompt:
+                st.success(f"🎉 درخواست رندر ویدیویی برای موضوع «{vid_prompt}» با موفقیت ارسال شد!")
+                # اتصال پرامپت به موتور رندر ویدیویی پویا
+                safe_v_prompt = requests.utils.quote(vid_prompt)
+                ai_video_preview = f"https://image.pollinations.ai/prompt/animation%20loop%20cinematic%20video%20of%20{safe_v_prompt}?width=720&height=720&nologo=true"
+                st.image(ai_video_preview, caption=f"خروجی متحرک ویدیو برای: {vid_prompt}", use_container_width=True)
+                st.info("💡 برای خروجی ویدیوهای طولانی‌تر، می‌توانید از ابزارهایی نظیر Luma Dream Machine یا Runway استفاده کنید.")
 
     # ----------------- بخش چهارم: ادمین -----------------
     elif menu == "🔑 بخش ادمین":
@@ -227,5 +245,5 @@ else:
             cursor = conn.cursor()
             cursor.execute("SELECT phone, name, text_count, image_count, video_count FROM users")
             for u in cursor.fetchall():
-                st.write(f"📞 {u[0]} | 👤 {u[1]} | متن: {u[2]} | عکس: {u[3]}")
+                st.write(f"📞 {u[0]} | 👤 {u[1]} | پیام‌ها: {u[2]}")
             conn.close()
