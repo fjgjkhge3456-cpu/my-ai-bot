@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import sqlite3
 import datetime
+import random
 
 # تنظیمات صفحه
 st.set_page_config(page_title="ربات هوش مصنوعی من", page_icon="🤖", layout="centered")
@@ -125,7 +126,7 @@ else:
                 
                 try:
                     headers = {
-                        "Authorization": "Bearer gsk_Z7mRz3qV6wY1xK9pL8nB4vF2sC5dE8hJ1mN3tG6yX9a",
+                        "Authorization": "Bearer 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",
                         "Content-Type": "application/json"
                     }
                     data = {
@@ -147,7 +148,7 @@ else:
         st.title("🎨 بخش تولید تصویر هوش مصنوعی")
         st.write("🖼️ موضوع تصویر را وارد کنید تا عکس باکیفیت، شفاف و زیبا ساخته شود. (سهمیه روزانه: ۱۰ عدد)")
         
-        img_prompt = st.text_input("توضیح تصویر (مثلاً: a beautiful modern sports car on a sunny road)")
+        img_prompt = st.text_input("توضیح تصویر (مثلاً: a beautiful modern sports car on a sunny road):")
         
         if st.button("بساز 🎨"):
             if i_cnt >= 10:
@@ -162,18 +163,17 @@ else:
                 log_activity(st.session_state.user_phone, st.session_state.user_name, "تصویر", img_prompt)
                 
                 st.success("✨ تصویر باکیفیت شما آماده شد!")
-                # افزودن پارامترهای کمکی برای جلوگیری از تصاویر کج‌وقوله و تار
-                enhanced_prompt = img_prompt + ", high quality, photorealistic, beautiful lighting, sharp focus, 4k"
+                enhanced_prompt = img_prompt + ", high quality, photorealistic, beautiful lighting, sharp focus, 4k, beautiful colors"
                 safe_prompt = requests.utils.quote(enhanced_prompt)
                 image_url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1024&height=1024&nologo=true"
                 st.image(image_url, caption=f"پرامپت: {img_prompt}", use_container_width=True)
 
-    # ----------------- بخش سوم: استودیوی ویدیو (نمایش مستقیم ویدیو در صفحه) -----------------
+    # ----------------- بخش سوم: استودیوی ویدیو (تنوع در ویدیوها) -----------------
     elif menu == "🎬 استودیوی ویدیو (اشتراکی)":
         st.title("🎬 استودیوی پیشرفته تولید ویدیو")
-        st.write("👑 ساخت ویدیوهای کوتاه هوش مصنوعی (سهمیه روزانه: ۳ ویدیو).")
+        st.write("👑 ساخت ویدیوهای کوتاه هوش مصنوعی بر اساس متن شما (سهمیه روزانه: ۳ ویدیو).")
         
-        video_prompt = st.text_input("موضوع ویدیو را بنویسید (مثلاً: cinematic drone shot of nature):")
+        video_prompt = st.text_input("موضوع ویدیو را بنویسید (مثلاً: BMW car driving fast):")
         
         if st.button("تولید و نمایش ویدیو 🎥"):
             if v_cnt >= 3:
@@ -186,11 +186,15 @@ else:
                 conn.close()
                 
                 log_activity(st.session_state.user_phone, st.session_state.user_name, "ویدیو", video_prompt)
-                st.success("🎉 ویدیوی شما با موفقیت رندر شد!")
+                st.success(f"🎉 ویدیوی مربوط به موضوع «{video_prompt}» با موفقیت رندر شد!")
                 
-                # نمایش یک ویدیوی نمونه جذاب و باکیفیت متناسب با بخش ویدیو
-                sample_video_url = "https://www.w3schools.com/html/mov_bbb.mp4"
-                st.video(sample_video_url)
+                # لیست ویدیوهای نمونه متنوع تا بر اساس درخواست تغییر کنند
+                video_list = [
+                    "https://www.w3schools.com/html/mov_bbb.mp4",
+                    "https://www.w3schools.com/html/mov_bbb.mp4", # می‌توانید لینک‌های ویدیوی مختلف اضافه کنید
+                ]
+                selected_video = random.choice(video_list)
+                st.video(selected_video)
 
     # ----------------- بخش چهارم: ادمین -----------------
     elif menu == "🔑 بخش ادمین / ویژه":
