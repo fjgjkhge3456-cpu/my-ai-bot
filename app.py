@@ -132,7 +132,7 @@ else:
                         "Content-Type": "application/json"
                     }
                     data = {
-                        "model": "llama-3.1-70b-versatile",
+                        "model": "llama-3.3-70b-versatile",
                         "messages": [{"role": "user", "content": user_prompt + " (لطفا با لحن خودمانی و کلی ایموجی پاسخ بده)"}]
                     }
                     response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=data)
@@ -141,7 +141,7 @@ else:
                         bot_reply = res_json["choices"][0]["message"]["content"]
                         st.success(bot_reply)
                     else:
-                        st.error("خطا در پاسخ‌دهی هوش مصنوعی.")
+                        st.error(f"خطا در پاسخ‌دهی هوش مصنوعی: {res_json}")
                 except Exception as e:
                     st.error(f"خطا در ارتباط با سرور: {e}")
 
@@ -150,7 +150,7 @@ else:
         st.title("🎨 بخش تولید تصویر هوش مصنوعی")
         st.write("🖼️ پرامپت خود را به انگلیسی بنویسید تا بهترین کیفیت تصویر خروجی داده شود. (سهمیه روزانه: ۱۰ عدد)")
         
-        img_prompt = st.text_input("توضیح تصویر (ترجیحاً انگلیسی برای کیفیت بهتر، مثلاً: futuristic car in cyberpunk city):")
+        img_prompt = st.text_input("توضیح تصویر (ترجیحاً انگلیسی، مثلاً: futuristic car in cyberpunk city):")
         
         if st.button("بساز 🎨"):
             if i_cnt >= 10:
@@ -165,10 +165,9 @@ else:
                 log_activity(st.session_state.user_phone, st.session_state.user_name, "تصویر", img_prompt)
                 
                 st.success("✨ تصویر شما با موفقیت آماده شد!")
-                # موتور پیشرفته و استاندارد ساخت تصویر
                 safe_prompt = requests.utils.quote(img_prompt)
                 image_url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1024&height=1024&nologo=true"
-                st.image(image_url, caption=f"پرامپت شما: {img_prompt}", use_column_width=True)
+                st.image(image_url, caption=f"پرامپت شما: {img_prompt}", use_container_width=True)
 
     # ----------------- بخش سوم: استودیوی ویدیو -----------------
     elif menu == "🎬 استودیوی ویدیو (اشتراکی)":
