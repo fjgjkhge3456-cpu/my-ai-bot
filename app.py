@@ -5,6 +5,7 @@ import datetime
 import random
 from PIL import Image, ImageEnhance, ImageOps
 import io
+from google import genai
 
 # تنظیمات صفحه
 st.set_page_config(page_title="ربات هوش مصنوعی آرین", page_icon="🤖", layout="centered")
@@ -99,7 +100,7 @@ else:
 
     menu = st.selectbox(
         "منوی اصلی سایت 👇",
-        ["💬 چت هوشمند (OpenAI/Groq)", "🎨 تولید با Flux و ویرایش آزاد عکس", "🎬 استودیوی ویدیوی واقعی", "🔑 بخش ادمین"]
+        ["💬 چت هوشمند (Gemini)", "🎨 تولید با Flux و ویرایش آزاد عکس", "🎬 استودیوی ویدیوی واقعی", "🔑 بخش ادمین"]
     )
 
     conn = sqlite3.connect("database.db", check_same_thread=False)
@@ -109,9 +110,9 @@ else:
     t_cnt, i_cnt, v_cnt = u_data if u_data else (0, 0, 0)
     conn.close()
 
-    # ----------------- بخش اول: چت هوشمند (متصل به هوش مصنوعی واقعی) -----------------
-    if menu == "💬 چت هوشمند (OpenAI/Groq)":
-        st.title("💬 چت هوشمند واقعی")
+    # ----------------- بخش اول: چت هوشمند (متصل به جمنای) -----------------
+    if menu == "💬 چت هوشمند (Gemini)":
+        st.title("💬 چت هوشمند واقعی (Gemini)")
         st.write(f"سلام {st.session_state.user_name} جان! هر سوالی داری بپرس تا هوش مصنوعی جواب بده.")
         
         for message in st.session_state.messages:
@@ -146,17 +147,14 @@ else:
 
                 with st.spinner("هوش مصنوعی در حال نوشتن پاسخ..."):
                     try:
-                        headers = {
-                            "Authorization": "Bearer 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",
-                            "Content-Type": "application/json"
-                        }
-                        data = {
-                            "model": "llama-3.3-70b-versatile",
-                            "messages": [{"role": "user", "content": user_prompt}]
-                        }
-                        response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=data, timeout=15)
-                        res_json = response.json()
-                        bot_reply = res_json["choices"][0]["message"]["content"]
+                        # اتصال به کلید API جمنای شما
+                        client = genai.Client(api_key="AQ.Ab8RN6JzJgZLwgTd2GzDlTZP-5QGocWt1nV-3GwCG5MaqowNsg")
+                        
+                        response = client.models.generate_content(
+                            model="gemini-2.5-flash",
+                            contents=user_prompt,
+                        )
+                        bot_reply = response.text
                     except Exception as e:
                         bot_reply = f"خطا در ارتباط با سرور هوش مصنوعی: {str(e)}"
 
@@ -188,7 +186,6 @@ else:
                     image = Image.open(edit_file)
                     inst = user_edit_instruction.lower()
                     
-                    # پردازش متن دستوری کاربر بدون محدودیت و سانسور
                     if "روشنایی" in inst or "نور" in inst:
                         enhancer = ImageEnhance.Brightness(image)
                         processed_image = enhancer.enhance(1.6)
@@ -207,7 +204,6 @@ else:
                         enhancer = ImageEnhance.Contrast(image)
                         processed_image = enhancer.enhance(2.0)
                     else:
-                        # اعمال پیش‌فرض پردازش هوشمند بر اساس دستور متنی کاربر
                         enhancer = ImageEnhance.Color(image)
                         processed_image = enhancer.enhance(1.3)
 
@@ -226,11 +222,8 @@ else:
         if st.button("ساخت و رندر ویدیوی واقعی 🎥"):
             if video_prompt:
                 st.success(f"🎉 ویدیوی اختصاصی برای «{video_prompt}» ساخته شد!")
-                # اتصال به سرویس رندر ویدیوی پویا بدون سانسور
                 safe_v_prompt = requests.utils.quote(video_prompt)
                 video_render_url = f"https://image.pollinations.ai/prompt/cinematic%20dynamic%20video%20animation%20of%20{safe_v_prompt}?width=720&height=720&nologo=true"
-                
-                # استفاده از تگ ویدیویی استریم‌لیت برای پخش خروجی متحرک
                 st.video(video_render_url)
 
     # ----------------- بخش چهارم: ادمین -----------------
