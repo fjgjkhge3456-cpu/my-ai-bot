@@ -5,7 +5,6 @@ import datetime
 import random
 from PIL import Image, ImageEnhance, ImageOps
 import io
-from google import genai
 
 # تنظیمات صفحه
 st.set_page_config(page_title="ربات هوش مصنوعی آرین", page_icon="🤖", layout="centered")
@@ -110,7 +109,7 @@ else:
     t_cnt, i_cnt, v_cnt = u_data if u_data else (0, 0, 0)
     conn.close()
 
-    # ----------------- بخش اول: چت هوشمند (متصل به جمنای) -----------------
+    # ----------------- بخش اول: چت هوشمند (متصل به جمنای با درخواست مستقیم) -----------------
     if menu == "💬 چت هوشمند (Gemini)":
         st.title("💬 چت هوشمند واقعی (Gemini)")
         st.write(f"سلام {st.session_state.user_name} جان! هر سوالی داری بپرس تا هوش مصنوعی جواب بده.")
@@ -147,16 +146,27 @@ else:
 
                 with st.spinner("هوش مصنوعی در حال نوشتن پاسخ..."):
                     try:
-                        # اتصال به کلید API جمنای شما
-                        client = genai.Client(api_key="AQ.Ab8RN6JzJgZLwgTd2GzDlTZP-5QGocWt1nV-3GwCG5MaqowNsg")
-                        
-                        response = client.models.generate_content(
-                            model="gemini-2.5-flash",
-                            contents=user_prompt,
-                        )
-                        bot_reply = response.text
+                        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
+                        headers = {
+                            "Content-Type": "application/json",
+                            "X-goog-api-key": "AQ.Ab8RN6KKigXKTJPPyo-QaNkDZzG6IzQFWyd0gAUkJ34ayzoO8g"
+                        }
+                        data = {
+                            "contents": [
+                                {
+                                    "parts": [
+                                        {
+                                            "text": user_prompt
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                        response = requests.post(url, headers=headers, json=data, timeout=15)
+                        res_json = response.json()
+                        bot_reply = res_json["candidates"][0]["content"]["parts"][0]["text"]
                     except Exception as e:
-                        bot_reply = f"خطا در ارتباط با سرور هوش مصنوعی: {str(e)}"
+                        bot_reply = f"خطا در ارتباط با سرور جمنای: {str(e)}"
 
                 st.session_state.messages.append({"role": "assistant", "content": bot_reply})
                 with st.chat_message("assistant"):
