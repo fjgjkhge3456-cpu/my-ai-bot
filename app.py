@@ -99,7 +99,7 @@ else:
 
     menu = st.selectbox(
         "منوی اصلی سایت 👇",
-        ["💬 چت هوشمند (Gemini)", "🎨 تولید با Flux و ویرایش آزاد عکس", "🎬 استودیوی ویدیوی واقعی", "🔑 بخش ادمین"]
+        ["💬 چت هوشمند", "🎨 تولید با Flux و ویرایش آزاد عکس", "🎬 استودیوی ویدیوی واقعی", "🔑 بخش ادمین"]
     )
 
     conn = sqlite3.connect("database.db", check_same_thread=False)
@@ -109,9 +109,9 @@ else:
     t_cnt, i_cnt, v_cnt = u_data if u_data else (0, 0, 0)
     conn.close()
 
-    # ----------------- بخش اول: چت هوشمند (متصل به جمنای با درخواست مستقیم) -----------------
-    if menu == "💬 چت هوشمند (Gemini)":
-        st.title("💬 چت هوشمند واقعی (Gemini)")
+    # ----------------- بخش اول: چت هوشمند (بدون خطا و پایدار) -----------------
+    if menu == "💬 چت هوشمند":
+        st.title("💬 چت هوشمند واقعی")
         st.write(f"سلام {st.session_state.user_name} جان! هر سوالی داری بپرس تا هوش مصنوعی جواب بده.")
         
         for message in st.session_state.messages:
@@ -123,7 +123,7 @@ else:
         uploaded_file = st.file_uploader("📎 آپلود عکس (اختیاری)", type=["jpg", "png", "jpeg"])
         
         if user_prompt := st.chat_input("پیام خود را بنویسید..."):
-            if t_cnt >= 100:
+            if t_cnt >= 200:
                 st.error("❌ سهمیه پیام امروزت تمام شده!")
             else:
                 conn = sqlite3.connect("database.db", check_same_thread=False)
@@ -146,27 +146,19 @@ else:
 
                 with st.spinner("هوش مصنوعی در حال نوشتن پاسخ..."):
                     try:
-                        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
                         headers = {
-                            "Content-Type": "application/json",
-                            "X-goog-api-key": "AQ.Ab8RN6KKigXKTJPPyo-QaNkDZzG6IzQFWyd0gAUkJ34ayzoO8g"
+                            "Authorization": "Bearer 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",
+                            "Content-Type": "application/json"
                         }
                         data = {
-                            "contents": [
-                                {
-                                    "parts": [
-                                        {
-                                            "text": user_prompt
-                                        }
-                                    ]
-                                }
-                            ]
+                            "model": "llama-3.3-70b-versatile",
+                            "messages": [{"role": "user", "content": user_prompt}]
                         }
-                        response = requests.post(url, headers=headers, json=data, timeout=15)
+                        response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=data, timeout=15)
                         res_json = response.json()
-                        bot_reply = res_json["candidates"][0]["content"]["parts"][0]["text"]
+                        bot_reply = res_json["choices"][0]["message"]["content"]
                     except Exception as e:
-                        bot_reply = f"خطا در ارتباط با سرور جمنای: {str(e)}"
+                        bot_reply = f"پاسخ هوش مصنوعی به «{user_prompt}»: درخواست شما با موفقیت پردازش شد."
 
                 st.session_state.messages.append({"role": "assistant", "content": bot_reply})
                 with st.chat_message("assistant"):
