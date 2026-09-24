@@ -69,61 +69,43 @@ def get_or_create_user(phone, name):
         conn.commit()
     conn.close()
 
-# تابع موتور هوشمند فوق سریع با زنجیره سوئیچ خودکار (Multi-Model Failover)
+# تابع اتصال مستقیم به Groq با کلید شما
 def ask_ai(prompt_text):
-    # اگر کلید Groq داشتید کلمه gsk_... را جایگزین کنید تا از فوق سریع‌ترین موتور دنیا استفاده شود
-    GROQ_API_KEY = "" 
+    GROQ_API_KEY = "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"
 
-    if GROQ_API_KEY.startswith("gsk_"):
-        try:
-            url = "https://api.groq.com/openai/v1/chat/completions"
-            headers = {
-                "Authorization": f"Bearer {GROQ_API_KEY}",
-                "Content-Type": "application/json"
-            }
-            payload = {
-                "model": "llama-3.3-70b-versatile",
-                "messages": [
-                    {"role": "system", "content": "شما یک دستیار هوش مصنوعی فوق‌العاده باهوش، سریع و مسلط به زبان فارسی هستید."},
-                    {"role": "user", "content": prompt_text}
-                ]
-            }
-            res = requests.post(url, headers=headers, json=payload, timeout=10)
-            if res.status_code == 200:
-                return res.json()["choices"][0]["message"]["content"]
-        except Exception:
-            pass
-
-    # لیست مدل‌های سریع و باکیفیت برای سوئیچ خودکار بدون معطلی
-    models = ["llama", "qwen-coder", "openai", "mistral"]
-    
-    for model_name in models:
-        try:
-            url = "https://text.pollinations.ai/"
-            payload = {
-                "messages": [
-                    {"role": "system", "content": "شما یک دستیار هوش مصنوعی باهوش و کامل به زبان فارسی هستید."},
-                    {"role": "user", "content": prompt_text}
-                ],
-                "model": model_name
-            }
-            res = requests.post(url, json=payload, timeout=7)
-            if res.status_code == 200 and res.text:
-                if "شلوغ است" not in res.text and "busy" not in res.text.lower():
-                    return res.text
-        except Exception:
-            continue
-
-    # اگر روش‌های قبلی پاسخ ندادند، از لینک مستقیم سریع استفاده می‌شود
     try:
-        safe_p = requests.utils.quote(prompt_text)
-        res = requests.get(f"https://text.pollinations.ai/{safe_p}?model=llama", timeout=8)
-        if res.status_code == 200 and res.text:
-            return res.text
-    except Exception:
-        pass
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        # ساخت ساختار پیام‌ها و حفظ تاریخچه گفتگو
+        messages_payload = [
+            {"role": "system", "content": "شما یک دستیار هوش مصنوعی بسیار باهوش، سریع و مسلط به زبان فارسی هستید که پاسخ‌های کامل و کاربردی ارائه می‌دهید."}
+        ]
+        
+        # اضافه کردن آخرین پیام‌های چت برای حفظ حافظه گفتگو
+        for msg in st.session_state.messages[-6:]:
+            messages_payload.append({"role": msg["role"], "content": msg["content"]})
+            
+        messages_payload.append({"role": "user", "content": prompt_text})
 
-    return "پاسخی دریافت نشد، لطفاً دوباره پیام دهید."
+        payload = {
+            "model": "llama-3.3-70b-versatile",
+            "messages": messages_payload,
+            "temperature": 0.7,
+            "max_tokens": 2048
+        }
+        
+        res = requests.post(url, headers=headers, json=payload, timeout=15)
+        if res.status_code == 200:
+            return res.json()["choices"][0]["message"]["content"]
+        else:
+            return f"خطا در دریافت پاسخ: {res.status_code} - {res.text}"
+            
+    except Exception as e:
+        return f"خطا در ارتباط با سرور: {str(e)}"
 
 # ----------------- سیستم ورود -----------------
 if not st.session_state.authenticated:
@@ -164,17 +146,13 @@ else:
 
     # ----------------- بخش اول: چت هوشمند -----------------
     if menu == "💬 چت هوشمند":
-        st.title("💬 چت هوشمند آنلاین")
-        st.write(f"سلام {st.session_state.user_name} جان! هر سوالی داری بپرس تا هوش مصنوعی پاسخ دهد.")
+        st.title("💬 چت هوشمند آنلاین (Groq Llama 3.3)")
+        st.write(f"سلام {st.session_state.user_name} جان! هر سوالی داری بپرس تا با سرعت فوق‌العاده پاسخ دهم.")
         
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
-                if "image" in message and message["image"]:
-                    st.image(message["image"], width=300)
 
-        uploaded_file = st.file_uploader("📎 آپلود عکس (اختیاری)", type=["jpg", "png", "jpeg"])
-        
         if user_prompt := st.chat_input("پیام خود را بنویسید..."):
             if t_cnt >= 200:
                 st.error("❌ سهمیه پیام امروز شما تمام شده است!")
@@ -187,15 +165,9 @@ else:
                 
                 log_activity(st.session_state.user_phone, st.session_state.user_name, "چت", user_prompt)
                 
-                user_message = {"role": "user", "content": user_prompt}
-                if uploaded_file:
-                    user_message["image"] = uploaded_file
-                
-                st.session_state.messages.append(user_message)
+                st.session_state.messages.append({"role": "user", "content": user_prompt})
                 with st.chat_message("user"):
                     st.markdown(user_prompt)
-                    if uploaded_file:
-                        st.image(uploaded_file, width=300)
 
                 with st.spinner("هوش مصنوعی در حال پاسخ‌دهی..."):
                     bot_reply = ask_ai(user_prompt)
