@@ -69,43 +69,52 @@ def get_or_create_user(phone, name):
         conn.commit()
     conn.close()
 
-# تابع اتصال مستقیم به Groq با کلید شما
+# تابع اتصال هوشمند و بدون قطعی با سیستم سوئیچ خودکار مدل‌ها
 def ask_ai(prompt_text):
     GROQ_API_KEY = "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"
 
-    try:
-        url = "https://api.groq.com/openai/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {GROQ_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        
-        # ساخت ساختار پیام‌ها و حفظ تاریخچه گفتگو
-        messages_payload = [
-            {"role": "system", "content": "شما یک دستیار هوش مصنوعی بسیار باهوش، سریع و مسلط به زبان فارسی هستید که پاسخ‌های کامل و کاربردی ارائه می‌دهید."}
-        ]
-        
-        # اضافه کردن آخرین پیام‌های چت برای حفظ حافظه گفتگو
-        for msg in st.session_state.messages[-6:]:
-            messages_payload.append({"role": msg["role"], "content": msg["content"]})
-            
-        messages_payload.append({"role": "user", "content": prompt_text})
+    # لیست مدل‌های فعال و جایگزین Groq
+    active_models = [
+        "llama-3.1-70b-versatile",
+        "llama-3.1-8b-instant",
+        "llama3-70b-8192",
+        "mixtral-8x7b-32768",
+        "llama3-8b-8192"
+    ]
 
-        payload = {
-            "model": "llama-3.3-70b-versatile",
-            "messages": messages_payload,
-            "temperature": 0.7,
-            "max_tokens": 2048
-        }
+    messages_payload = [
+        {"role": "system", "content": "شما یک دستیار هوش مصنوعی بسیار باهوش، سریع و مسلط به زبان فارسی هستید که پاسخ‌های کامل و کاربردی ارائه می‌دهید."}
+    ]
+    
+    # اضافه کردن پیام‌های قبلی برای حفظ حافظه چت
+    for msg in st.session_state.messages[-6:]:
+        messages_payload.append({"role": msg["role"], "content": msg["content"]})
         
-        res = requests.post(url, headers=headers, json=payload, timeout=15)
-        if res.status_code == 200:
-            return res.json()["choices"][0]["message"]["content"]
-        else:
-            return f"خطا در دریافت پاسخ: {res.status_code} - {res.text}"
+    messages_payload.append({"role": "user", "content": prompt_text})
+
+    # تست تک‌تک مدل‌ها برای جلوگیری از ارور ۴۰۴
+    for model_name in active_models:
+        try:
+            url = "https://api.groq.com/openai/v1/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json"
+            }
             
-    except Exception as e:
-        return f"خطا در ارتباط با سرور: {str(e)}"
+            payload = {
+                "model": model_name,
+                "messages": messages_payload,
+                "temperature": 0.7,
+                "max_tokens": 2048
+            }
+            
+            res = requests.post(url, headers=headers, json=payload, timeout=12)
+            if res.status_code == 200:
+                return res.json()["choices"][0]["message"]["content"]
+        except Exception:
+            continue
+
+    return "❌ خطایی در دریافت پاسخ از سرور رخ داد. لطفاً دوباره پیام دهید."
 
 # ----------------- سیستم ورود -----------------
 if not st.session_state.authenticated:
@@ -146,7 +155,7 @@ else:
 
     # ----------------- بخش اول: چت هوشمند -----------------
     if menu == "💬 چت هوشمند":
-        st.title("💬 چت هوشمند آنلاین (Groq Llama 3.3)")
+        st.title("💬 چت هوشمند آنلاین (Groq Llama 3)")
         st.write(f"سلام {st.session_state.user_name} جان! هر سوالی داری بپرس تا با سرعت فوق‌العاده پاسخ دهم.")
         
         for message in st.session_state.messages:
