@@ -69,34 +69,61 @@ def get_or_create_user(phone, name):
         conn.commit()
     conn.close()
 
-# تابع قدرتمند پاسخ‌دهی هوش مصنوعی (افزایش زمان به ۳۰ ثانیه)
+# تابع موتور هوشمند فوق سریع با زنجیره سوئیچ خودکار (Multi-Model Failover)
 def ask_ai(prompt_text):
-    # تلاش با مدل اصلی
-    try:
-        url = "https://text.pollinations.ai/"
-        payload = {
-            "messages": [
-                {"role": "system", "content": "شما یک دستیار هوش مصنوعی بسیار باهوش و کامل به زبان فارسی هستید."},
-                {"role": "user", "content": prompt_text}
-            ],
-            "model": "openai"
-        }
-        res = requests.post(url, json=payload, timeout=30)
-        if res.status_code == 200 and res.text:
-            return res.text
-    except Exception:
-        pass
+    # اگر کلید Groq داشتید کلمه gsk_... را جایگزین کنید تا از فوق سریع‌ترین موتور دنیا استفاده شود
+    GROQ_API_KEY = "" 
 
-    # تلاش با مدل پشتیبان و سریع‌تر (Qwen/Mistral)
+    if GROQ_API_KEY.startswith("gsk_"):
+        try:
+            url = "https://api.groq.com/openai/v1/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": "llama-3.3-70b-versatile",
+                "messages": [
+                    {"role": "system", "content": "شما یک دستیار هوش مصنوعی فوق‌العاده باهوش، سریع و مسلط به زبان فارسی هستید."},
+                    {"role": "user", "content": prompt_text}
+                ]
+            }
+            res = requests.post(url, headers=headers, json=payload, timeout=10)
+            if res.status_code == 200:
+                return res.json()["choices"][0]["message"]["content"]
+        except Exception:
+            pass
+
+    # لیست مدل‌های سریع و باکیفیت برای سوئیچ خودکار بدون معطلی
+    models = ["llama", "qwen-coder", "openai", "mistral"]
+    
+    for model_name in models:
+        try:
+            url = "https://text.pollinations.ai/"
+            payload = {
+                "messages": [
+                    {"role": "system", "content": "شما یک دستیار هوش مصنوعی باهوش و کامل به زبان فارسی هستید."},
+                    {"role": "user", "content": prompt_text}
+                ],
+                "model": model_name
+            }
+            res = requests.post(url, json=payload, timeout=7)
+            if res.status_code == 200 and res.text:
+                if "شلوغ است" not in res.text and "busy" not in res.text.lower():
+                    return res.text
+        except Exception:
+            continue
+
+    # اگر روش‌های قبلی پاسخ ندادند، از لینک مستقیم سریع استفاده می‌شود
     try:
         safe_p = requests.utils.quote(prompt_text)
-        res = requests.get(f"https://text.pollinations.ai/{safe_p}?model=qwen-coder", timeout=30)
+        res = requests.get(f"https://text.pollinations.ai/{safe_p}?model=llama", timeout=8)
         if res.status_code == 200 and res.text:
             return res.text
     except Exception:
         pass
 
-    return "⚠️ سرور در حال حاضر شلوغ است، لطفاً همین پیام را مجدداً ارسال کنید."
+    return "پاسخی دریافت نشد، لطفاً دوباره پیام دهید."
 
 # ----------------- سیستم ورود -----------------
 if not st.session_state.authenticated:
@@ -170,7 +197,7 @@ else:
                     if uploaded_file:
                         st.image(uploaded_file, width=300)
 
-                with st.spinner("هوش مصنوعی در حال پاسخ‌دهی (ممکن است چند ثانیه طول بکشد)..."):
+                with st.spinner("هوش مصنوعی در حال پاسخ‌دهی..."):
                     bot_reply = ask_ai(user_prompt)
 
                 st.session_state.messages.append({"role": "assistant", "content": bot_reply})
