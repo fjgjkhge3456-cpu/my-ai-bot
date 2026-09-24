@@ -2,9 +2,7 @@ import streamlit as st
 import requests
 import sqlite3
 import datetime
-import random
 from PIL import Image, ImageEnhance, ImageOps
-import io
 
 # تنظیمات صفحه
 st.set_page_config(page_title="ربات هوش مصنوعی آرین", page_icon="🤖", layout="centered")
@@ -44,8 +42,6 @@ if "user_phone" not in st.session_state:
     st.session_state.user_phone = ""
 if "user_name" not in st.session_state:
     st.session_state.user_name = ""
-if "admin_logged" not in st.session_state:
-    st.session_state.admin_logged = False
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -99,7 +95,7 @@ else:
 
     menu = st.selectbox(
         "منوی اصلی سایت 👇",
-        ["💬 چت هوشمند (OpenAI/Groq)", "🎨 تولید با Flux و ویرایش آزاد عکس", "🎬 استودیوی ویدیوی واقعی", "🔑 بخش ادمین"]
+        ["💬 چت هوشمند (Gemini)", "🎨 تولید با Flux و ویرایش آزاد عکس", "🎬 استودیوی ویدیوی واقعی", "🔑 بخش ادمین"]
     )
 
     conn = sqlite3.connect("database.db", check_same_thread=False)
@@ -109,9 +105,9 @@ else:
     t_cnt, i_cnt, v_cnt = u_data if u_data else (0, 0, 0)
     conn.close()
 
-    # ----------------- بخش اول: چت هوشمند (متصل به هوش مصنوعی واقعی) -----------------
-    if menu == "💬 چت هوشمند (OpenAI/Groq)":
-        st.title("💬 چت هوشمند واقعی")
+    # ----------------- بخش اول: چت هوشمند (متصل مستقیم به Gemini) -----------------
+    if menu == "💬 چت هوشمند (Gemini)":
+        st.title("💬 چت هوشمند واقعی (Gemini)")
         st.write(f"سلام {st.session_state.user_name} جان! هر سوالی داری بپرس تا هوش مصنوعی جواب بده.")
         
         for message in st.session_state.messages:
@@ -123,7 +119,7 @@ else:
         uploaded_file = st.file_uploader("📎 آپلود عکس (اختیاری)", type=["jpg", "png", "jpeg"])
         
         if user_prompt := st.chat_input("پیام خود را بنویسید..."):
-            if t_cnt >= 100:
+            if t_cnt >= 200:
                 st.error("❌ سهمیه پیام امروزت تمام شده!")
             else:
                 conn = sqlite3.connect("database.db", check_same_thread=False)
@@ -144,27 +140,41 @@ else:
                     if uploaded_file:
                         st.image(uploaded_file, width=300)
 
-                with st.spinner("هوش مصنوعی در حال نوشتن پاسخ..."):
+                with st.spinner("جمنای در حال پاسخ‌دهی..."):
                     try:
+                        API_KEY = "AQ.Ab8RN6JWH_rFgkwsYbAwq3WQQAv3gkq2zAjiRf_yVCG0gkYmvg"
+                        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={API_KEY}"
+                        
                         headers = {
-                            "Authorization": "Bearer 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",
                             "Content-Type": "application/json"
                         }
                         data = {
-                            "model": "llama-3.3-70b-versatile",
-                            "messages": [{"role": "user", "content": user_prompt}]
+                            "contents": [
+                                {
+                                    "parts": [
+                                        {"text": user_prompt}
+                                    ]
+                                }
+                            ]
                         }
-                        response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=data, timeout=15)
+                        
+                        response = requests.post(url, headers=headers, json=data, timeout=25)
                         res_json = response.json()
-                        bot_reply = res_json["choices"][0]["message"]["content"]
+                        
+                        if "candidates" in res_json and len(res_json["candidates"]) > 0:
+                            bot_reply = res_json["candidates"][0]["content"]["parts"][0]["text"]
+                        elif "error" in res_json:
+                            bot_reply = f"خطا از سمت گوگل: {res_json['error'].get('message', str(res_json['error']))}"
+                        else:
+                            bot_reply = f"پاسخ غیرمنتظره از سرور: {str(res_json)}"
                     except Exception as e:
-                        bot_reply = f"خطا در ارتباط با سرور هوش مصنوعی: {str(e)}"
+                        bot_reply = f"خطا در ارتباط با سرور جمنای: {str(e)}"
 
                 st.session_state.messages.append({"role": "assistant", "content": bot_reply})
                 with st.chat_message("assistant"):
                     st.markdown(bot_reply)
 
-    # ----------------- بخش دوم: تولید با Flux و ویرایش آزاد عکس -----------------
+    # ----------------- بخش دوم: تولید با Flux و ویرایش عکس -----------------
     elif menu == "🎨 تولید با Flux و ویرایش آزاد عکس":
         st.title("🎨 تولید با Flux و ویرایش دستی عکس")
         
@@ -181,14 +191,13 @@ else:
 
         with tab2:
             edit_file = st.file_uploader("عکس خود را آپلود کنید:", type=["jpg", "png", "jpeg"], key="edit_img")
-            user_edit_instruction = st.text_input("دستور ویرایش خود را بنویسید (مثلاً: تار کردن پس‌زمینه، چرخش، افزایش روشنایی، سیاه و سفید یا نگاتیو):")
+            user_edit_instruction = st.text_input("دستور ویرایش خود را بنویسید (مثلاً: روشنایی، سیاه و سفید، تاریک، کنتراست، چرخش یا نگاتیو):")
             
             if st.button("اعمال ویرایش روی عکس 🪄"):
                 if edit_file and user_edit_instruction:
                     image = Image.open(edit_file)
                     inst = user_edit_instruction.lower()
                     
-                    # پردازش متن دستوری کاربر بدون محدودیت و سانسور
                     if "روشنایی" in inst or "نور" in inst:
                         enhancer = ImageEnhance.Brightness(image)
                         processed_image = enhancer.enhance(1.6)
@@ -207,7 +216,6 @@ else:
                         enhancer = ImageEnhance.Contrast(image)
                         processed_image = enhancer.enhance(2.0)
                     else:
-                        # اعمال پیش‌فرض پردازش هوشمند بر اساس دستور متنی کاربر
                         enhancer = ImageEnhance.Color(image)
                         processed_image = enhancer.enhance(1.3)
 
@@ -216,7 +224,7 @@ else:
                 else:
                     st.warning("⚠️ لطفاً هم عکس را آپلود کنید و هم دستور ویرایش را بنویسید.")
 
-    # ----------------- بخش سوم: استودیوی ویدیوی واقعی بدون سانسور -----------------
+    # ----------------- بخش سوم: استودیوی ویدیوی واقعی -----------------
     elif menu == "🎬 استودیوی ویدیوی واقعی":
         st.title("🎬 استودیوی رندر و ساخت ویدیوی هوش مصنوعی")
         st.write("👑 موضوع ویدیوی خود را بنویسید تا موتور هوش مصنوعی ویدیو را رندر و مستقیماً نمایش دهد:")
@@ -226,11 +234,8 @@ else:
         if st.button("ساخت و رندر ویدیوی واقعی 🎥"):
             if video_prompt:
                 st.success(f"🎉 ویدیوی اختصاصی برای «{video_prompt}» ساخته شد!")
-                # اتصال به سرویس رندر ویدیوی پویا بدون سانسور
                 safe_v_prompt = requests.utils.quote(video_prompt)
                 video_render_url = f"https://image.pollinations.ai/prompt/cinematic%20dynamic%20video%20animation%20of%20{safe_v_prompt}?width=720&height=720&nologo=true"
-                
-                # استفاده از تگ ویدیویی استریم‌لیت برای پخش خروجی متحرک
                 st.video(video_render_url)
 
     # ----------------- بخش چهارم: ادمین -----------------
