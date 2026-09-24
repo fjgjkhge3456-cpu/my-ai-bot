@@ -4,7 +4,7 @@ import sqlite3
 import datetime
 from PIL import Image, ImageEnhance, ImageOps
 
-# تنظیمات صفحه
+# تنظیمات اصلی صفحه
 st.set_page_config(page_title="ربات هوش مصنوعی آرین", page_icon="🤖", layout="centered")
 
 # راه‌اندازی دیتابیس محلی
@@ -36,6 +36,7 @@ def init_db():
 
 init_db()
 
+# مقداردهی نشست‌ها (Session State)
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 if "user_phone" not in st.session_state:
@@ -105,10 +106,10 @@ else:
     t_cnt, i_cnt, v_cnt = u_data if u_data else (0, 0, 0)
     conn.close()
 
-    # ----------------- بخش اول: چت هوشمند (متصل مستقیم به Gemini) -----------------
+    # ----------------- بخش اول: چت هوشمند (Gemini) -----------------
     if menu == "💬 چت هوشمند (Gemini)":
         st.title("💬 چت هوشمند واقعی (Gemini)")
-        st.write(f"سلام {st.session_state.user_name} جان! هر سوالی داری بپرس تا هوش مصنوعی جواب بده.")
+        st.write(f"سلام {st.session_state.user_name} جان! هر سوالی داری بپرس تا هوش مصنوعی پاسخ دهد.")
         
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
@@ -120,7 +121,7 @@ else:
         
         if user_prompt := st.chat_input("پیام خود را بنویسید..."):
             if t_cnt >= 200:
-                st.error("❌ سهمیه پیام امروزت تمام شده!")
+                st.error("❌ سهمیه پیام امروز شما تمام شده است!")
             else:
                 conn = sqlite3.connect("database.db", check_same_thread=False)
                 cursor = conn.cursor()
@@ -140,35 +141,50 @@ else:
                     if uploaded_file:
                         st.image(uploaded_file, width=300)
 
-                with st.spinner("جمنای در حال پاسخ‌دهی..."):
-                    try:
-                        API_KEY = "AQ.Ab8RN6JWH_rFgkwsYbAwq3WQQAv3gkq2zAjiRf_yVCG0gkYmvg"
-                        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={API_KEY}"
+                with st.spinner("جمنای در حال تحلیل و پاسخ‌دهی..."):
+                    API_KEY = "AQ.Ab8RN6J8TS_mbVaAOjNN9Ph-9beyiImpOYteSFCVNHeq64FRtA"
+                    bot_reply = None
+                    last_error = ""
+
+                    # لیست روش‌ها و مدل‌ها برای تضمین دریافت پاسخ بدون ارور
+                    models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash"]
+                    
+                    for model in models:
+                        payload = {"contents": [{"parts": [{"text": user_prompt}]}]}
                         
-                        headers = {
-                            "Content-Type": "application/json"
-                        }
-                        data = {
-                            "contents": [
-                                {
-                                    "parts": [
-                                        {"text": user_prompt}
-                                    ]
-                                }
-                            ]
-                        }
-                        
-                        response = requests.post(url, headers=headers, json=data, timeout=25)
-                        res_json = response.json()
-                        
-                        if "candidates" in res_json and len(res_json["candidates"]) > 0:
-                            bot_reply = res_json["candidates"][0]["content"]["parts"][0]["text"]
-                        elif "error" in res_json:
-                            bot_reply = f"خطا از سمت گوگل: {res_json['error'].get('message', str(res_json['error']))}"
-                        else:
-                            bot_reply = f"پاسخ غیرمنتظره از سرور: {str(res_json)}"
-                    except Exception as e:
-                        bot_reply = f"خطا در ارتباط با سرور جمنای: {str(e)}"
+                        # تست روش ۱: ارسال به صورت URL Parameter
+                        try:
+                            url_1 = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={API_KEY}"
+                            headers_1 = {"Content-Type": "application/json"}
+                            res1 = requests.post(url_1, headers=headers_1, json=payload, timeout=12)
+                            res_j1 = res1.json()
+                            
+                            if "candidates" in res_j1 and len(res_j1["candidates"]) > 0:
+                                bot_reply = res_j1["candidates"][0]["content"]["parts"][0]["text"]
+                                break
+                            elif "error" in res_j1:
+                                last_error = res_j1["error"].get("message", str(res_j1["error"]))
+                        except Exception as e:
+                            last_error = str(e)
+
+                        # تست روش ۲: ارسال به صورت Bearer Token
+                        try:
+                            url_2 = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+                            headers_2 = {
+                                "Content-Type": "application/json",
+                                "Authorization": f"Bearer {API_KEY}"
+                            }
+                            res2 = requests.post(url_2, headers=headers_2, json=payload, timeout=12)
+                            res_j2 = res2.json()
+                            
+                            if "candidates" in res_j2 and len(res_j2["candidates"]) > 0:
+                                bot_reply = res_j2["candidates"][0]["content"]["parts"][0]["text"]
+                                break
+                        except Exception as e:
+                            last_error = str(e)
+
+                    if not bot_reply:
+                        bot_reply = f"خطا در دریافت پاسخ از سرور: {last_error}"
 
                 st.session_state.messages.append({"role": "assistant", "content": bot_reply})
                 with st.chat_message("assistant"):
