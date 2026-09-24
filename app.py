@@ -69,48 +69,34 @@ def get_or_create_user(phone, name):
         conn.commit()
     conn.close()
 
-# تابع هوشمند دریافت پاسخ از هوش مصنوعی (بدون نیاز به کلید و ۱۰۰٪ تضمینی)
+# تابع قدرتمند پاسخ‌دهی هوش مصنوعی (افزایش زمان به ۳۰ ثانیه)
 def ask_ai(prompt_text):
-    API_KEY = "AQ.Ab8RN6J8TS_mbVaAOjNN9Ph-9beyiImpOYteSFCVNHeq64FRtA"
-    
-    # اگر کلید معتبر جمنای (شروع با AIzaSy) وجود داشت، ابتدا از جمنای استفاده می‌شود
-    if API_KEY.startswith("AIzaSy"):
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={API_KEY}"
-            payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
-            res = requests.post(url, json=payload, timeout=8)
-            data = res.json()
-            if "candidates" in data and len(data["candidates"]) > 0:
-                return data["candidates"][0]["content"]["parts"][0]["text"]
-        except Exception:
-            pass
-
-    # در غیر این صورت از سرور هوشمند بدون نیاز به کلید استفاده می‌شود
+    # تلاش با مدل اصلی
     try:
         url = "https://text.pollinations.ai/"
         payload = {
             "messages": [
-                {"role": "system", "content": "شما یک دستیار هوش مصنوعی فارسی‌زبان و بسیار باهوش هستید."},
+                {"role": "system", "content": "شما یک دستیار هوش مصنوعی بسیار باهوش و کامل به زبان فارسی هستید."},
                 {"role": "user", "content": prompt_text}
             ],
             "model": "openai"
         }
-        res = requests.post(url, json=payload, timeout=12)
+        res = requests.post(url, json=payload, timeout=30)
         if res.status_code == 200 and res.text:
             return res.text
     except Exception:
         pass
 
+    # تلاش با مدل پشتیبان و سریع‌تر (Qwen/Mistral)
     try:
-        # روش دوم جایگزین
         safe_p = requests.utils.quote(prompt_text)
-        res = requests.get(f"https://text.pollinations.ai/{safe_p}", timeout=12)
+        res = requests.get(f"https://text.pollinations.ai/{safe_p}?model=qwen-coder", timeout=30)
         if res.status_code == 200 and res.text:
             return res.text
-    except Exception as e:
-        return f"خطا در برقراری ارتباط: {str(e)}"
+    except Exception:
+        pass
 
-    return "پاسخی دریافت نشد، لطفاً دوباره تلاش کنید."
+    return "⚠️ سرور در حال حاضر شلوغ است، لطفاً همین پیام را مجدداً ارسال کنید."
 
 # ----------------- سیستم ورود -----------------
 if not st.session_state.authenticated:
@@ -184,7 +170,7 @@ else:
                     if uploaded_file:
                         st.image(uploaded_file, width=300)
 
-                with st.spinner("هوش مصنوعی در حال پاسخ‌دهی..."):
+                with st.spinner("هوش مصنوعی در حال پاسخ‌دهی (ممکن است چند ثانیه طول بکشد)..."):
                     bot_reply = ask_ai(user_prompt)
 
                 st.session_state.messages.append({"role": "assistant", "content": bot_reply})
