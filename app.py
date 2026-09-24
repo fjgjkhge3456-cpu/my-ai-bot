@@ -1,17 +1,19 @@
 import streamlit as st
 import sqlite3
 import datetime
+import os
 import google.generativeai as genai
 from PIL import Image, ImageEnhance, ImageOps
 
 # تنظیمات اصلی صفحه
 st.set_page_config(page_title="ربات هوش مصنوعی آرین", page_icon="🤖", layout="centered")
 
-# کلید اختصاصی گوگل جمنای شما
-GEMINI_API_KEY = "AQ.Ab8RN6Iweu1QitvP2jgDt9hHbp30xDDc8eiq7MYWPjuTTppXLg"
+# دریافت کلید API از متغیرهای محیطی Render یا مقدار دستی
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
-# پیکربندی API جمنای
-genai.configure(api_key=GEMINI_API_KEY)
+# اگر کلید ست شده باشد، تنظیمات جمنای اعمال می‌شود
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 # راه‌اندازی دیتابیس محلی
 def init_db():
@@ -114,7 +116,7 @@ else:
 
     # ----------------- چت هوشمند جمنای با افکت تایپ زنده -----------------
     if menu == "💬 چت هوشمند (Gemini)":
-        st.title("💬 چت هوشمند زنده (Powered by Gemini 1.5)")
+        st.title("💬 چت هوشمند زنده (Google Gemini)")
         st.write(f"سلام {st.session_state.user_name} جان! سوالت رو بپرس تا کلمه‌به‌کلمه برات تایپ کنم.")
         
         # نمایش تاریخچه چت
@@ -126,7 +128,6 @@ else:
             if t_cnt >= 200:
                 st.error("❌ سهمیه پیام امروز شما تمام شده است!")
             else:
-                # ثبت تعداد پیام
                 conn = sqlite3.connect("database.db", check_same_thread=False)
                 cursor = conn.cursor()
                 cursor.execute("UPDATE users SET text_count = text_count + 1 WHERE phone = ?", (st.session_state.user_phone,))
@@ -135,38 +136,52 @@ else:
                 
                 log_activity(st.session_state.user_phone, st.session_state.user_name, "چت", user_prompt)
                 
-                # نمایش پیام کاربر
                 st.session_state.messages.append({"role": "user", "content": user_prompt})
                 with st.chat_message("user"):
                     st.markdown(user_prompt)
 
-                # تولید پاسخ زنده کلمه‌به‌کلمه با Gemini API
                 with st.chat_message("assistant"):
-                    try:
-                        model = genai.GenerativeModel('gemini-1.5-flash')
-                        
-                        # ارسال تاریخچه پیام‌ها برای درک context
-                        chat_history = []
-                        for msg in st.session_state.messages[-6:]:
-                            role = "user" if msg["role"] == "user" else "model"
-                            chat_history.append({"role": role, "parts": [msg["content"]]})
+                    # لیست مدل‌های پشتیبانی شده جمنای
+                    candidate_models = [
+                        "gemini-1.5-flash",
+                        "gemini-1.5-flash-latest",
+                        "gemini-2.0-flash",
+                        "gemini-1.5-pro",
+                        "gemini-1.5-pro-latest",
+                        "gemini-pro"
+                    ]
+                    
+                    response_stream = None
+                    last_error = ""
 
-                        chat = model.start_chat(history=chat_history[:-1])
-                        
-                        # دریافت پاسخ به صورت استریم (تایپ زنده)
-                        response_stream = chat.send_message(user_prompt, stream=True)
-                        
+                    # ارسال تاریخچه چت
+                    chat_history = []
+                    for msg in st.session_state.messages[-6:]:
+                        role = "user" if msg["role"] == "user" else "model"
+                        chat_history.append({"role": role, "parts": [msg["content"]]})
+
+                    # تلاش برای اتصال به اولین مدل فعال
+                    for m_name in candidate_models:
+                        try:
+                            model = genai.GenerativeModel(m_name)
+                            chat = model.start_chat(history=chat_history[:-1])
+                            response_stream = chat.send_message(user_prompt, stream=True)
+                            if response_stream:
+                                break
+                        except Exception as e:
+                            last_error = str(e)
+                            continue
+
+                    if response_stream:
                         def generate_chunks():
                             for chunk in response_stream:
-                                yield chunk.text
+                                if chunk.text:
+                                    yield chunk.text
 
-                        # نمایش تایپ‌رایتری مثل ChatGPT/Gemini
                         full_response = st.write_stream(generate_chunks)
-                        
                         st.session_state.messages.append({"role": "assistant", "content": full_response})
-
-                    except Exception as e:
-                        st.error(f"❌ خطایی رخ داد: {str(e)}")
+                    else:
+                        st.error(f"❌ خطایی در اتصال به جمنای رخ داد: {last_error}")
 
     # ----------------- بخش‌های دیگر -----------------
     elif menu == "🎨 تولید با Flux و ویرایش آزاد عکس":
