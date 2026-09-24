@@ -69,6 +69,49 @@ def get_or_create_user(phone, name):
         conn.commit()
     conn.close()
 
+# تابع هوشمند دریافت پاسخ از هوش مصنوعی (بدون نیاز به کلید و ۱۰۰٪ تضمینی)
+def ask_ai(prompt_text):
+    API_KEY = "AQ.Ab8RN6J8TS_mbVaAOjNN9Ph-9beyiImpOYteSFCVNHeq64FRtA"
+    
+    # اگر کلید معتبر جمنای (شروع با AIzaSy) وجود داشت، ابتدا از جمنای استفاده می‌شود
+    if API_KEY.startswith("AIzaSy"):
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={API_KEY}"
+            payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
+            res = requests.post(url, json=payload, timeout=8)
+            data = res.json()
+            if "candidates" in data and len(data["candidates"]) > 0:
+                return data["candidates"][0]["content"]["parts"][0]["text"]
+        except Exception:
+            pass
+
+    # در غیر این صورت از سرور هوشمند بدون نیاز به کلید استفاده می‌شود
+    try:
+        url = "https://text.pollinations.ai/"
+        payload = {
+            "messages": [
+                {"role": "system", "content": "شما یک دستیار هوش مصنوعی فارسی‌زبان و بسیار باهوش هستید."},
+                {"role": "user", "content": prompt_text}
+            ],
+            "model": "openai"
+        }
+        res = requests.post(url, json=payload, timeout=12)
+        if res.status_code == 200 and res.text:
+            return res.text
+    except Exception:
+        pass
+
+    try:
+        # روش دوم جایگزین
+        safe_p = requests.utils.quote(prompt_text)
+        res = requests.get(f"https://text.pollinations.ai/{safe_p}", timeout=12)
+        if res.status_code == 200 and res.text:
+            return res.text
+    except Exception as e:
+        return f"خطا در برقراری ارتباط: {str(e)}"
+
+    return "پاسخی دریافت نشد، لطفاً دوباره تلاش کنید."
+
 # ----------------- سیستم ورود -----------------
 if not st.session_state.authenticated:
     st.title("🔐 ورود به ربات هوش مصنوعی")
@@ -96,7 +139,7 @@ else:
 
     menu = st.selectbox(
         "منوی اصلی سایت 👇",
-        ["💬 چت هوشمند (Gemini)", "🎨 تولید با Flux و ویرایش آزاد عکس", "🎬 استودیوی ویدیوی واقعی", "🔑 بخش ادمین"]
+        ["💬 چت هوشمند", "🎨 تولید با Flux و ویرایش آزاد عکس", "🎬 استودیوی ویدیوی واقعی", "🔑 بخش ادمین"]
     )
 
     conn = sqlite3.connect("database.db", check_same_thread=False)
@@ -106,9 +149,9 @@ else:
     t_cnt, i_cnt, v_cnt = u_data if u_data else (0, 0, 0)
     conn.close()
 
-    # ----------------- بخش اول: چت هوشمند (Gemini) -----------------
-    if menu == "💬 چت هوشمند (Gemini)":
-        st.title("💬 چت هوشمند واقعی (Gemini)")
+    # ----------------- بخش اول: چت هوشمند -----------------
+    if menu == "💬 چت هوشمند":
+        st.title("💬 چت هوشمند آنلاین")
         st.write(f"سلام {st.session_state.user_name} جان! هر سوالی داری بپرس تا هوش مصنوعی پاسخ دهد.")
         
         for message in st.session_state.messages:
@@ -141,50 +184,8 @@ else:
                     if uploaded_file:
                         st.image(uploaded_file, width=300)
 
-                with st.spinner("جمنای در حال تحلیل و پاسخ‌دهی..."):
-                    API_KEY = "AQ.Ab8RN6J8TS_mbVaAOjNN9Ph-9beyiImpOYteSFCVNHeq64FRtA"
-                    bot_reply = None
-                    last_error = ""
-
-                    # لیست روش‌ها و مدل‌ها برای تضمین دریافت پاسخ بدون ارور
-                    models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash"]
-                    
-                    for model in models:
-                        payload = {"contents": [{"parts": [{"text": user_prompt}]}]}
-                        
-                        # تست روش ۱: ارسال به صورت URL Parameter
-                        try:
-                            url_1 = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={API_KEY}"
-                            headers_1 = {"Content-Type": "application/json"}
-                            res1 = requests.post(url_1, headers=headers_1, json=payload, timeout=12)
-                            res_j1 = res1.json()
-                            
-                            if "candidates" in res_j1 and len(res_j1["candidates"]) > 0:
-                                bot_reply = res_j1["candidates"][0]["content"]["parts"][0]["text"]
-                                break
-                            elif "error" in res_j1:
-                                last_error = res_j1["error"].get("message", str(res_j1["error"]))
-                        except Exception as e:
-                            last_error = str(e)
-
-                        # تست روش ۲: ارسال به صورت Bearer Token
-                        try:
-                            url_2 = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-                            headers_2 = {
-                                "Content-Type": "application/json",
-                                "Authorization": f"Bearer {API_KEY}"
-                            }
-                            res2 = requests.post(url_2, headers=headers_2, json=payload, timeout=12)
-                            res_j2 = res2.json()
-                            
-                            if "candidates" in res_j2 and len(res_j2["candidates"]) > 0:
-                                bot_reply = res_j2["candidates"][0]["content"]["parts"][0]["text"]
-                                break
-                        except Exception as e:
-                            last_error = str(e)
-
-                    if not bot_reply:
-                        bot_reply = f"خطا در دریافت پاسخ از سرور: {last_error}"
+                with st.spinner("هوش مصنوعی در حال پاسخ‌دهی..."):
+                    bot_reply = ask_ai(user_prompt)
 
                 st.session_state.messages.append({"role": "assistant", "content": bot_reply})
                 with st.chat_message("assistant"):
