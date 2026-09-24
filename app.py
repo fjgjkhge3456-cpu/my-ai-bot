@@ -1,11 +1,17 @@
 import streamlit as st
-import requests
 import sqlite3
 import datetime
+import google.generativeai as genai
 from PIL import Image, ImageEnhance, ImageOps
 
 # تنظیمات اصلی صفحه
 st.set_page_config(page_title="ربات هوش مصنوعی آرین", page_icon="🤖", layout="centered")
+
+# کلید اختصاصی گوگل جمنای شما
+GEMINI_API_KEY = "AQ.Ab8RN6Iweu1QitvP2jgDt9hHbp30xDDc8eiq7MYWPjuTTppXLg"
+
+# پیکربندی API جمنای
+genai.configure(api_key=GEMINI_API_KEY)
 
 # راه‌اندازی دیتابیس محلی
 def init_db():
@@ -69,46 +75,6 @@ def get_or_create_user(phone, name):
         conn.commit()
     conn.close()
 
-# تابع چت اصلی (نسخه اول و بدون نیاز به کلید - بهینه‌شده برای سرعت بیشتر)
-def ask_ai(prompt_text):
-    messages_payload = [
-        {"role": "system", "content": "شما یک دستیار هوش مصنوعی باهوش، سریع و مسلط به زبان فارسی هستید."}
-    ]
-    
-    # اضافه کردن پیام‌های قبلی چت
-    for msg in st.session_state.messages[-4:]:
-        messages_payload.append({"role": msg["role"], "content": msg["content"]})
-        
-    messages_payload.append({"role": "user", "content": prompt_text})
-
-    # لیست مدل‌های سریع بدون نیاز به کلید
-    models_to_try = ["openai", "llama", "mistral"]
-    
-    for model_name in models_to_try:
-        try:
-            url = "https://text.pollinations.ai/"
-            payload = {
-                "messages": messages_payload,
-                "model": model_name
-            }
-            res = requests.post(url, json=payload, timeout=8)
-            if res.status_code == 200 and res.text.strip():
-                if "شلوغ است" not in res.text and "busy" not in res.text.lower():
-                    return res.text.strip()
-        except Exception:
-            continue
-
-    # اگر درخواست POST زمان‌بر شد، سریع‌ترین لینک مستقیم GET اجرا می‌شود
-    try:
-        safe_p = requests.utils.quote(prompt_text)
-        res = requests.get(f"https://text.pollinations.ai/{safe_p}?model=openai", timeout=6)
-        if res.status_code == 200 and res.text.strip():
-            return res.text.strip()
-    except Exception:
-        pass
-
-    return "سرور در حال حاضر کمی شلوغ است، لطفاً دوباره پیام دهید."
-
 # ----------------- سیستم ورود -----------------
 if not st.session_state.authenticated:
     st.title("🔐 ورود به ربات هوش مصنوعی")
@@ -136,7 +102,7 @@ else:
 
     menu = st.selectbox(
         "منوی اصلی سایت 👇",
-        ["💬 چت هوشمند", "🎨 تولید با Flux و ویرایش آزاد عکس", "🎬 استودیوی ویدیوی واقعی", "🔑 بخش ادمین"]
+        ["💬 چت هوشمند (Gemini)", "🎨 تولید با Flux و ویرایش آزاد عکس", "🎬 استودیوی ویدیوی واقعی", "🔑 بخش ادمین"]
     )
 
     conn = sqlite3.connect("database.db", check_same_thread=False)
@@ -146,11 +112,12 @@ else:
     t_cnt, i_cnt, v_cnt = u_data if u_data else (0, 0, 0)
     conn.close()
 
-    # ----------------- بخش اول: چت هوشمند -----------------
-    if menu == "💬 چت هوشمند":
-        st.title("💬 چت هوشمند آنلاین")
-        st.write(f"سلام {st.session_state.user_name} جان! هر سوالی داری بپرس تا پاسخ دهم.")
+    # ----------------- چت هوشمند جمنای با افکت تایپ زنده -----------------
+    if menu == "💬 چت هوشمند (Gemini)":
+        st.title("💬 چت هوشمند زنده (Powered by Gemini 1.5)")
+        st.write(f"سلام {st.session_state.user_name} جان! سوالت رو بپرس تا کلمه‌به‌کلمه برات تایپ کنم.")
         
+        # نمایش تاریخچه چت
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
@@ -159,6 +126,7 @@ else:
             if t_cnt >= 200:
                 st.error("❌ سهمیه پیام امروز شما تمام شده است!")
             else:
+                # ثبت تعداد پیام
                 conn = sqlite3.connect("database.db", check_same_thread=False)
                 cursor = conn.cursor()
                 cursor.execute("UPDATE users SET text_count = text_count + 1 WHERE phone = ?", (st.session_state.user_phone,))
@@ -167,89 +135,74 @@ else:
                 
                 log_activity(st.session_state.user_phone, st.session_state.user_name, "چت", user_prompt)
                 
+                # نمایش پیام کاربر
                 st.session_state.messages.append({"role": "user", "content": user_prompt})
                 with st.chat_message("user"):
                     st.markdown(user_prompt)
 
-                with st.spinner("هوش مصنوعی در حال پاسخ‌دهی..."):
-                    bot_reply = ask_ai(user_prompt)
-
-                st.session_state.messages.append({"role": "assistant", "content": bot_reply})
+                # تولید پاسخ زنده کلمه‌به‌کلمه با Gemini API
                 with st.chat_message("assistant"):
-                    st.markdown(bot_reply)
+                    try:
+                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        
+                        # ارسال تاریخچه پیام‌ها برای درک context
+                        chat_history = []
+                        for msg in st.session_state.messages[-6:]:
+                            role = "user" if msg["role"] == "user" else "model"
+                            chat_history.append({"role": role, "parts": [msg["content"]]})
 
-    # ----------------- بخش دوم: تولید با Flux و ویرایش عکس -----------------
+                        chat = model.start_chat(history=chat_history[:-1])
+                        
+                        # دریافت پاسخ به صورت استریم (تایپ زنده)
+                        response_stream = chat.send_message(user_prompt, stream=True)
+                        
+                        def generate_chunks():
+                            for chunk in response_stream:
+                                yield chunk.text
+
+                        # نمایش تایپ‌رایتری مثل ChatGPT/Gemini
+                        full_response = st.write_stream(generate_chunks)
+                        
+                        st.session_state.messages.append({"role": "assistant", "content": full_response})
+
+                    except Exception as e:
+                        st.error(f"❌ خطایی رخ داد: {str(e)}")
+
+    # ----------------- بخش‌های دیگر -----------------
     elif menu == "🎨 تولید با Flux و ویرایش آزاد عکس":
         st.title("🎨 تولید با Flux و ویرایش دستی عکس")
-        
         tab1, tab2 = st.tabs(["ساخت تصویر با Flux 🌟", "ویرایش آزاد عکس 🛠️"])
         
         with tab1:
-            flux_prompt = st.text_input("توضیح تصویر (پرامپت به انگلیسی یا فارسی):", key="flux_p")
+            flux_prompt = st.text_input("توضیح تصویر:", key="flux_p")
             if st.button("تولید تصویر با Flux 🚀"):
                 if flux_prompt:
-                    st.success("✨ تصویر با موتور Flux در حال ساخت است...")
-                    safe_prompt = requests.utils.quote(flux_prompt)
-                    flux_url = f"https://image.pollinations.ai/prompt/{safe_prompt}?model=flux&width=1024&height=1024&nologo=true"
-                    st.image(flux_url, caption=f"Flux: {flux_prompt}", use_container_width=True)
+                    st.image(f"https://image.pollinations.ai/prompt/{flux_prompt}?model=flux&width=1024&height=1024&nologo=true", use_container_width=True)
 
         with tab2:
             edit_file = st.file_uploader("عکس خود را آپلود کنید:", type=["jpg", "png", "jpeg"], key="edit_img")
-            user_edit_instruction = st.text_input("دستور ویرایش خود را بنویسید (مثلاً: روشنایی، سیاه و سفید، تاریک، کنتراست، چرخش یا نگاتیو):")
-            
-            if st.button("اعمال ویرایش روی عکس 🪄"):
-                if edit_file and user_edit_instruction:
-                    image = Image.open(edit_file)
-                    inst = user_edit_instruction.lower()
-                    
-                    if "روشنایی" in inst or "نور" in inst:
-                        enhancer = ImageEnhance.Brightness(image)
-                        processed_image = enhancer.enhance(1.6)
-                    elif "تاریک" in inst:
-                        enhancer = ImageEnhance.Brightness(image)
-                        processed_image = enhancer.enhance(0.4)
-                    elif "سیاه و سفید" in inst or "grayscale" in inst:
-                        processed_image = ImageOps.grayscale(image)
-                    elif "نگاتیو" in inst or "معکوس" in inst:
-                        if image.mode == 'RGBA':
-                            image = image.convert('RGB')
-                        processed_image = ImageOps.invert(image)
-                    elif "چرخش" in inst:
-                        processed_image = image.rotate(90, expand=True)
-                    elif "کنتراست" in inst or "وضوح" in inst:
-                        enhancer = ImageEnhance.Contrast(image)
-                        processed_image = enhancer.enhance(2.0)
-                    else:
-                        enhancer = ImageEnhance.Color(image)
-                        processed_image = enhancer.enhance(1.3)
+            user_edit_instruction = st.text_input("دستور ویرایش (روشنایی، سیاه و سفید، تاریک، چرخش):")
+            if st.button("اعمال ویرایش روی عکس 🪄") and edit_file:
+                image = Image.open(edit_file)
+                inst = user_edit_instruction.lower()
+                if "روشنایی" in inst:
+                    image = ImageEnhance.Brightness(image).enhance(1.6)
+                elif "سیاه و سفید" in inst:
+                    image = ImageOps.grayscale(image)
+                st.image(image, use_container_width=True)
 
-                    st.success(f"✅ ویرایش با موفقیت بر اساس دستور «{user_edit_instruction}» انجام شد!")
-                    st.image(processed_image, caption=f"دستور شما: {user_edit_instruction}", use_container_width=True)
-                else:
-                    st.warning("⚠️ لطفاً هم عکس را آپلود کنید و هم دستور ویرایش را بنویسید.")
-
-    # ----------------- بخش سوم: استودیوی ویدیوی واقعی -----------------
     elif menu == "🎬 استودیوی ویدیوی واقعی":
-        st.title("🎬 استودیوی رندر و ساخت ویدیوی هوش مصنوعی")
-        st.write("👑 موضوع ویدیوی خود را بنویسید تا موتور هوش مصنوعی ویدیو را رندر و مستقیماً نمایش دهد:")
-        
-        video_prompt = st.text_input("پرامپت ویدیو (مثلا: cinematic drone shot of driving a car, 4k):")
-        
-        if st.button("ساخت و رندر ویدیوی واقعی 🎥"):
-            if video_prompt:
-                st.success(f"🎉 ویدیوی اختصاصی برای «{video_prompt}» ساخته شد!")
-                safe_v_prompt = requests.utils.quote(video_prompt)
-                video_render_url = f"https://image.pollinations.ai/prompt/cinematic%20dynamic%20video%20animation%20of%20{safe_v_prompt}?width=720&height=720&nologo=true"
-                st.video(video_render_url)
+        st.title("🎬 استودیوی رندر ویدیو")
+        video_prompt = st.text_input("پرامپت ویدیو:")
+        if st.button("ساخت و رندر ویدیوی واقعی 🎥") and video_prompt:
+            st.video(f"https://image.pollinations.ai/prompt/cinematic%20video%20{video_prompt}?width=720&height=720&nologo=true")
 
-    # ----------------- بخش چهارم: ادمین -----------------
     elif menu == "🔑 بخش ادمین":
         st.title("🔑 پنل مدیریت")
-        admin_pass = st.text_input("رمز عبور:", type="password")
-        if admin_pass == "2345":
+        if st.text_input("رمز عبور:", type="password") == "2345":
             conn = sqlite3.connect("database.db", check_same_thread=False)
             cursor = conn.cursor()
-            cursor.execute("SELECT phone, name, text_count, image_count, video_count FROM users")
+            cursor.execute("SELECT phone, name, text_count FROM users")
             for u in cursor.fetchall():
                 st.write(f"📞 {u[0]} | 👤 {u[1]} | پیام‌ها: {u[2]}")
             conn.close()
