@@ -69,52 +69,45 @@ def get_or_create_user(phone, name):
         conn.commit()
     conn.close()
 
-# تابع اتصال هوشمند و بدون قطعی با سیستم سوئیچ خودکار مدل‌ها
+# تابع چت اصلی (نسخه اول و بدون نیاز به کلید - بهینه‌شده برای سرعت بیشتر)
 def ask_ai(prompt_text):
-    GROQ_API_KEY = "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"
-
-    # لیست مدل‌های فعال و جایگزین Groq
-    active_models = [
-        "llama-3.1-70b-versatile",
-        "llama-3.1-8b-instant",
-        "llama3-70b-8192",
-        "mixtral-8x7b-32768",
-        "llama3-8b-8192"
-    ]
-
     messages_payload = [
-        {"role": "system", "content": "شما یک دستیار هوش مصنوعی بسیار باهوش، سریع و مسلط به زبان فارسی هستید که پاسخ‌های کامل و کاربردی ارائه می‌دهید."}
+        {"role": "system", "content": "شما یک دستیار هوش مصنوعی باهوش، سریع و مسلط به زبان فارسی هستید."}
     ]
     
-    # اضافه کردن پیام‌های قبلی برای حفظ حافظه چت
-    for msg in st.session_state.messages[-6:]:
+    # اضافه کردن پیام‌های قبلی چت
+    for msg in st.session_state.messages[-4:]:
         messages_payload.append({"role": msg["role"], "content": msg["content"]})
         
     messages_payload.append({"role": "user", "content": prompt_text})
 
-    # تست تک‌تک مدل‌ها برای جلوگیری از ارور ۴۰۴
-    for model_name in active_models:
+    # لیست مدل‌های سریع بدون نیاز به کلید
+    models_to_try = ["openai", "llama", "mistral"]
+    
+    for model_name in models_to_try:
         try:
-            url = "https://api.groq.com/openai/v1/chat/completions"
-            headers = {
-                "Authorization": f"Bearer {GROQ_API_KEY}",
-                "Content-Type": "application/json"
-            }
-            
+            url = "https://text.pollinations.ai/"
             payload = {
-                "model": model_name,
                 "messages": messages_payload,
-                "temperature": 0.7,
-                "max_tokens": 2048
+                "model": model_name
             }
-            
-            res = requests.post(url, headers=headers, json=payload, timeout=12)
-            if res.status_code == 200:
-                return res.json()["choices"][0]["message"]["content"]
+            res = requests.post(url, json=payload, timeout=8)
+            if res.status_code == 200 and res.text.strip():
+                if "شلوغ است" not in res.text and "busy" not in res.text.lower():
+                    return res.text.strip()
         except Exception:
             continue
 
-    return "❌ خطایی در دریافت پاسخ از سرور رخ داد. لطفاً دوباره پیام دهید."
+    # اگر درخواست POST زمان‌بر شد، سریع‌ترین لینک مستقیم GET اجرا می‌شود
+    try:
+        safe_p = requests.utils.quote(prompt_text)
+        res = requests.get(f"https://text.pollinations.ai/{safe_p}?model=openai", timeout=6)
+        if res.status_code == 200 and res.text.strip():
+            return res.text.strip()
+    except Exception:
+        pass
+
+    return "سرور در حال حاضر کمی شلوغ است، لطفاً دوباره پیام دهید."
 
 # ----------------- سیستم ورود -----------------
 if not st.session_state.authenticated:
@@ -155,8 +148,8 @@ else:
 
     # ----------------- بخش اول: چت هوشمند -----------------
     if menu == "💬 چت هوشمند":
-        st.title("💬 چت هوشمند آنلاین (Groq Llama 3)")
-        st.write(f"سلام {st.session_state.user_name} جان! هر سوالی داری بپرس تا با سرعت فوق‌العاده پاسخ دهم.")
+        st.title("💬 چت هوشمند آنلاین")
+        st.write(f"سلام {st.session_state.user_name} جان! هر سوالی داری بپرس تا پاسخ دهم.")
         
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
