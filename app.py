@@ -8,10 +8,9 @@ from PIL import Image, ImageEnhance, ImageOps
 # تنظیمات اصلی صفحه
 st.set_page_config(page_title="ربات هوش مصنوعی آرین", page_icon="🤖", layout="centered")
 
-# دریافت کلید API از متغیرهای محیطی Render یا مقدار دستی
+# دریافت کلید API از متغیرهای محیطی Render
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
-# اگر کلید ست شده باشد، تنظیمات جمنای اعمال می‌شود
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
@@ -114,7 +113,7 @@ else:
     t_cnt, i_cnt, v_cnt = u_data if u_data else (0, 0, 0)
     conn.close()
 
-    # ----------------- چت هوشمند جمنای با افکت تایپ زنده -----------------
+    # ----------------- چت هوشمند جمنای با دریافت هوشمند مدل‌ها -----------------
     if menu == "💬 چت هوشمند (Gemini)":
         st.title("💬 چت هوشمند زنده (Google Gemini)")
         st.write(f"سلام {st.session_state.user_name} جان! سوالت رو بپرس تا کلمه‌به‌کلمه برات تایپ کنم.")
@@ -141,27 +140,35 @@ else:
                     st.markdown(user_prompt)
 
                 with st.chat_message("assistant"):
-                    # لیست مدل‌های پشتیبانی شده جمنای
-                    candidate_models = [
-                        "gemini-1.5-flash",
-                        "gemini-1.5-flash-latest",
-                        "gemini-2.0-flash",
-                        "gemini-1.5-pro",
-                        "gemini-1.5-pro-latest",
-                        "gemini-pro"
-                    ]
-                    
                     response_stream = None
                     last_error = ""
 
-                    # ارسال تاریخچه چت
+                    # 1. دریافت هوشمند تمام مدل‌های فعال اکانت شما از گوگل
+                    available_models = []
+                    try:
+                        for m in genai.list_models():
+                            if 'generateContent' in m.supported_generation_methods:
+                                available_models.append(m.name)
+                    except Exception as e:
+                        last_error = str(e)
+
+                    # 2. لیست پشتیبان در صورت عدم دریافت لیست مستقیم
+                    if not available_models:
+                        available_models = [
+                            "models/gemini-2.5-flash",
+                            "models/gemini-2.0-flash",
+                            "models/gemini-1.5-flash",
+                            "models/gemini-1.5-pro"
+                        ]
+
+                    # آماده‌سازی تاریخچه چت
                     chat_history = []
                     for msg in st.session_state.messages[-6:]:
                         role = "user" if msg["role"] == "user" else "model"
                         chat_history.append({"role": role, "parts": [msg["content"]]})
 
-                    # تلاش برای اتصال به اولین مدل فعال
-                    for m_name in candidate_models:
+                    # تلاش برای فراخوانی مدل‌های فعال به ترتیب
+                    for m_name in available_models:
                         try:
                             model = genai.GenerativeModel(m_name)
                             chat = model.start_chat(history=chat_history[:-1])
